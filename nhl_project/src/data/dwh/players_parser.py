@@ -33,11 +33,11 @@ dag = DAG(
     description="ETL process for getting list of NHL teams roaster",
 )
 
-SOURCE_PATH = "/nhl-ml-project/data/dwh/source/"
-STAGING_PATH = "/nhl-ml-project/data/dwh/vault/staging/"
-OPERATIONAL_PATH = "/nhl-ml-project/data/dwh/vault/operational/"
-DETAILED_PATH = "/nhl-ml-project/data/dwh/vault/detailed/"
-COMMON_PATH = "/nhl-ml-project/data/dwh/vault/common/"
+SOURCE_PATH = "/nhl_project/data/dwh/source/"
+STAGING_PATH = "/nhl_project/data/dwh/vault/staging/"
+OPERATIONAL_PATH = "/nhl_project/data/dwh/vault/operational/"
+DETAILED_PATH = "/nhl_project/data/dwh/vault/detailed/"
+COMMON_PATH = "/nhl_project/data/dwh/vault/common/"
 
 
 def get_information(endpoint, base_url="https://api-web.nhle.com"):
