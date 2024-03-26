@@ -30,14 +30,14 @@ dag = DAG(
     catchup=False,
     tags=["hse_nhl_ml_project"],
     default_args=DEFAULT_ARGS,
-    description="ETL process for getting list of NHL players",
+    description="ETL process for getting list of NHL teams daily statistics",
 )
 
-SOURCE_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/dwh/source/"
-STAGING_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/dwh/vault/staging/"
-OPERATIONAL_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/dwh/vault/operational/"
-DETAILED_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/dwh/vault/detailed/"
-COMMON_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/dwh/vault/common/"
+SOURCE_PATH = "/nhl-ml-project/data/dwh/source/"
+STAGING_PATH = "/nhl-ml-project/data/dwh/vault/staging/"
+OPERATIONAL_PATH = "/nhl-ml-project/data/dwh/vault/operational/"
+DETAILED_PATH = "/nhl-ml-project/data/dwh/vault/detailed/"
+COMMON_PATH = "/nhl-ml-project/data/dwh/vault/common/"
 
 
 def get_information(endpoint, base_url="https://api-web.nhle.com"):

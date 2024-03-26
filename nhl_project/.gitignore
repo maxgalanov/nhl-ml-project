@@ -77,6 +77,9 @@ target/
 
 # exclude data from source control by default
 # /data/
+*.parquet
+*.crc
+_SUCCESS
 
 # Mac OS-specific storage files
 .DS_Store
