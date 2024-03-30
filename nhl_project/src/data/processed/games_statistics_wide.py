@@ -24,26 +24,35 @@ sat_teams_core = spark.read.parquet(DETAILED_PATH + f"sat_teams_core")
 
 
 games = dm_games.filter(F.col("is_active") == "True") \
-                    .join(tl_teams_games, "game_id", "inner") \
-                    .join(hub_teams.alias("df1"), F.col("df1.team_id") == tl_teams_games["home_team_id"] , "inner")\
-                    .join(hub_teams.alias("df2"), F.col("df2.team_id") == tl_teams_games["visiting_team_id"] , "inner")\
-                    .select("game_source_id",
-                            dm_games["game_date"],
-                            "season",
-                            F.col("df1.team_business_id").alias("home_team_code"),
-                            F.col("df2.team_business_id").alias("visiting_team_code"),
-                            "game_type",
-                            "home_score",
-                            "visiting_score",
-                            (F.col("home_score") - F.col("visiting_score")).alias("score_delta"),
-                            )
+    .join(tl_teams_games, "game_id", "inner") \
+    .join(
+        hub_teams.alias("df1"),
+        F.col("df1.team_id") == tl_teams_games["home_team_id"],
+        "inner",
+    ).join(
+        hub_teams.alias("df2"),
+        F.col("df2.team_id") == tl_teams_games["visiting_team_id"],
+        "inner",
+    ).select(
+        "game_source_id",
+        dm_games["game_date"],
+        "season",
+        F.col("df1.team_business_id").alias("home_team_code"),
+        F.col("df2.team_business_id").alias("visiting_team_code"),
+        "game_type",
+        "home_score",
+        "visiting_score",
+        (F.col("home_score") - F.col("visiting_score")).alias("score_delta"),
+    )
 
-teams_stat = tl_teams_stat.join(sat_teams_core.filter(F.col("is_active") == "True"), 
-                   tl_teams_stat.team_id == sat_teams_core.team_id,
-                   "inner") \
-                .select(tl_teams_stat["*"],
-                        sat_teams_core.conference_name,
-                        sat_teams_core.division_name)
+teams_stat = tl_teams_stat.join(
+    sat_teams_core.filter(F.col("is_active") == "True"),
+    tl_teams_stat.team_id == sat_teams_core.team_id,
+    "inner",
+).select(
+    tl_teams_stat["*"], sat_teams_core.conference_name, sat_teams_core.division_name
+)
+
 
 tl_teams_stat_home = teams_stat.select(
     [F.col(col_name).alias("h_" + col_name) for col_name in teams_stat.columns]
