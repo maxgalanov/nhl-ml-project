@@ -9,7 +9,6 @@ from airflow.utils.dates import days_ago
 
 import pyspark
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, concat_ws, when, isnan, hash, sha1, coalesce, lag, lead, date_sub
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
@@ -64,8 +63,8 @@ def get_teams_to_source(**kwargs):
     df_teams_pd = pd.DataFrame(data_teams["data"])
 
     df_teams = spark.createDataFrame(df_teams_pd)\
-        .withColumn("_source_load_datetime", lit(dt))\
-        .withColumn("_source", lit("API_NHL"))
+        .withColumn("_source_load_datetime", F.lit(dt))\
+        .withColumn("_source", F.lit("API_NHL"))
 
     df_teams.repartition(1).write.mode("overwrite").parquet(SOURCE_PATH + f"teams/{current_date}")
     
@@ -89,30 +88,30 @@ def get_teams_to_staging(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
     df_new = spark.read.parquet(SOURCE_PATH + f"teams/{current_date}")
-    df_new = df_new.withColumn("_source_is_deleted", lit("False"))
+    df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
     prev_file_name = get_penultimate_file_name(SOURCE_PATH + "teams")
 
     if prev_file_name:
         df_prev = spark.read.parquet(SOURCE_PATH + f"teams/{prev_file_name}")
-        df_prev = df_prev.withColumn("_source_is_deleted", lit("True"))
+        df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
         
         df_deleted = df_prev.join(df_new, "id", "leftanti")\
                             .withColumn("_source_load_datetime", 
-                                        lit(df_new.select("_source_load_datetime").first()[0]))
+                                        F.lit(df_new.select("_source_load_datetime").first()[0]))
         
-        df_changed = df_new.select(col("id"),
-                                   col("fullName"),
-                                   col("triCode"))\
-                            .subtract(df_prev.select(col("id"),
-                                                     col("fullName"),
-                                                     col("triCode")))
+        df_changed = df_new.select(F.col("id"),
+                                   F.col("fullName"),
+                                   F.col("triCode"))\
+                            .subtract(df_prev.select(F.col("id"),
+                                                     F.col("fullName"),
+                                                     F.col("triCode")))
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
         df_final = df_changed.union(df_deleted)\
-                                        .withColumn("_batch_id", lit(current_date))
+                                        .withColumn("_batch_id", F.lit(current_date))
     else:
-        df_final = df_new.withColumn("_batch_id", lit(current_date))
+        df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
     df_final.repartition(1).write.mode("overwrite").parquet(STAGING_PATH + f"teams/{current_date}")
     
@@ -123,15 +122,15 @@ def get_teams_to_operational(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
     df = spark.read.parquet(STAGING_PATH + f"teams/{current_date}")
-    df = df.select(col("id").alias("team_source_id"),
-                    col("fullName").alias("team_full_name"),
-                    col("triCode").alias("team_business_id"),
+    df = df.select(F.col("id").alias("team_source_id"),
+                    F.col("fullName").alias("team_full_name"),
+                    F.col("triCode").alias("team_business_id"),
                     
-                    col("_source_load_datetime"),
-                    col("_source_is_deleted"),
-                    col("_source"),
-                    col("_batch_id"))\
-            .withColumn("team_id", sha1(concat_ws("_", col("team_source_id"), col("_source"))))
+                    F.col("_source_load_datetime"),
+                    F.col("_source_is_deleted"),
+                    F.col("_source"),
+                    F.col("_batch_id"))\
+            .withColumn("team_id", F.sha1(F.concat_ws("_", F.col("team_source_id"), F.col("_source"))))
     
     df.repartition(1).write.mode("append").parquet(OPERATIONAL_PATH + f"teams")
     
@@ -144,13 +143,13 @@ def hub_teams(**kwargs):
     )
 
     df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams")\
-        .filter(col("_batch_id") == lit(current_date))\
-        .select(col("team_id"),
-                col("team_business_id"),
-                col("team_source_id"),
+        .filter(F.col("_batch_id") == F.lit(current_date))\
+        .select(F.col("team_id"),
+                F.col("team_business_id"),
+                F.col("team_source_id"),
 
-                col("_source_load_datetime"),
-                col("_source"))
+                F.col("_source_load_datetime"),
+                F.col("_source"))
 
     try:
         df_old = spark.read.parquet(DETAILED_PATH + f"hub_teams")

@@ -9,7 +9,6 @@ from airflow.utils.dates import days_ago
 
 import pyspark
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, concat_ws, when, isnan, hash, sha1, coalesce, lag, lead, expr, last
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
@@ -93,8 +92,8 @@ def get_players_to_source(**kwargs):
 
     dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     df_teams_roster = spark.createDataFrame(teams_roster)\
-        .withColumn("_source_load_datetime", lit(dt))\
-        .withColumn("_source", lit("API_NHL"))
+        .withColumn("_source_load_datetime", F.lit(dt))\
+        .withColumn("_source", F.lit("API_NHL"))
 
     df_teams_roster.repartition(1).write.mode("overwrite").parquet(SOURCE_PATH + f"teams_roster/{current_date}")
     
@@ -118,56 +117,56 @@ def get_players_to_staging(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
     df_new = spark.read.parquet(SOURCE_PATH + f"teams_roster/{current_date}")
-    df_new = df_new.withColumn("_source_is_deleted", lit("False"))
+    df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
     prev_file_name = get_penultimate_file_name(SOURCE_PATH + "teams_roster")
 
     if prev_file_name:
         df_prev = spark.read.parquet(SOURCE_PATH + f"teams_roster/{prev_file_name}")
-        df_prev = df_prev.withColumn("_source_is_deleted", lit("True"))
+        df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
         
         df_deleted = df_prev.join(df_new, "id", "leftanti")\
                                     .withColumn("_source_load_datetime", 
-                                                lit(df_new.select("_source_load_datetime").first()[0]))
+                                                F.lit(df_new.select("_source_load_datetime").first()[0]))
         
-        df_changed = df_new.select(col("id"),
-                                col("headshot"),
-                                col("firstName"),
-                                col("lastName"),
-                                col("sweaterNumber"),
-                                col("positionCode"),
-                                col("shootsCatches"),
-                                col("heightInInches"),
-                                col("weightInPounds"),
-                                col("heightInCentimeters"),
-                                col("weightInKilograms"),
-                                col("birthDate"),
-                                col("birthCity"),
-                                col("birthCountry"),
-                                col("birthStateProvince"),
-                                col("triCodeCurrent"))\
-                            .subtract(df_prev.select(col("id"),
-                                                    col("headshot"),
-                                                    col("firstName"),
-                                                    col("lastName"),
-                                                    col("sweaterNumber"),
-                                                    col("positionCode"),
-                                                    col("shootsCatches"),
-                                                    col("heightInInches"),
-                                                    col("weightInPounds"),
-                                                    col("heightInCentimeters"),
-                                                    col("weightInKilograms"),
-                                                    col("birthDate"),
-                                                    col("birthCity"),
-                                                    col("birthCountry"),
-                                                    col("birthStateProvince"),
-                                                    col("triCodeCurrent")))
+        df_changed = df_new.select(F.col("id"),
+                                F.col("headshot"),
+                                F.col("firstName"),
+                                F.col("lastName"),
+                                F.col("sweaterNumber"),
+                                F.col("positionCode"),
+                                F.col("shootsCatches"),
+                                F.col("heightInInches"),
+                                F.col("weightInPounds"),
+                                F.col("heightInCentimeters"),
+                                F.col("weightInKilograms"),
+                                F.col("birthDate"),
+                                F.col("birthCity"),
+                                F.col("birthCountry"),
+                                F.col("birthStateProvince"),
+                                F.col("triCodeCurrent"))\
+                            .subtract(df_prev.select(F.col("id"),
+                                                    F.col("headshot"),
+                                                    F.col("firstName"),
+                                                    F.col("lastName"),
+                                                    F.col("sweaterNumber"),
+                                                    F.col("positionCode"),
+                                                    F.col("shootsCatches"),
+                                                    F.col("heightInInches"),
+                                                    F.col("weightInPounds"),
+                                                    F.col("heightInCentimeters"),
+                                                    F.col("weightInKilograms"),
+                                                    F.col("birthDate"),
+                                                    F.col("birthCity"),
+                                                    F.col("birthCountry"),
+                                                    F.col("birthStateProvince"),
+                                                    F.col("triCodeCurrent")))
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
         df_final = df_changed.union(df_deleted)\
-                            .withColumn("_batch_id", lit(current_date))
+                            .withColumn("_batch_id", F.lit(current_date))
     else:
-        df_final = df_new.withColumn("_batch_id", lit(current_date))
+        df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
     df_final.repartition(1).write.mode("overwrite").parquet(STAGING_PATH + f"teams_roster/{current_date}")
 
@@ -180,29 +179,29 @@ def get_players_to_operational(**kwargs):
     df = spark.read.parquet(STAGING_PATH + f"teams_roster/{current_date}")
     hub_teams = spark.read.parquet(DETAILED_PATH + f"hub_teams")
 
-    df = df.select(col("id").alias("player_source_id"),
-                    col("headshot"),
-                    col("firstName").alias("first_name"),
-                    col("lastName").alias("last_name"),
-                    col("sweaterNumber").alias("sweater_number"),
-                    col("positionCode").alias("position_code"),
-                    col("shootsCatches").alias("shoots_catches"),
-                    col("heightInInches").alias("height_in_inches"),
-                    col("weightInPounds").alias("weight_in_pounds"),
-                    col("heightInCentimeters").alias("height_in_centimeters"),
-                    col("weightInKilograms").alias("weight_in_kilograms"),
-                    col("birthDate").alias("birth_date"),
-                    col("birthCity").alias("birth_city"),
-                    col("birthCountry").alias("birth_country"),
-                    col("birthStateProvince").alias("birth_state_province"),
-                    col("triCodeCurrent").alias("team_business_id"),
+    df = df.select(F.col("id").alias("player_source_id"),
+                    F.col("headshot"),
+                    F.col("firstName").alias("first_name"),
+                    F.col("lastName").alias("last_name"),
+                    F.col("sweaterNumber").alias("sweater_number"),
+                    F.col("positionCode").alias("position_code"),
+                    F.col("shootsCatches").alias("shoots_catches"),
+                    F.col("heightInInches").alias("height_in_inches"),
+                    F.col("weightInPounds").alias("weight_in_pounds"),
+                    F.col("heightInCentimeters").alias("height_in_centimeters"),
+                    F.col("weightInKilograms").alias("weight_in_kilograms"),
+                    F.col("birthDate").alias("birth_date"),
+                    F.col("birthCity").alias("birth_city"),
+                    F.col("birthCountry").alias("birth_country"),
+                    F.col("birthStateProvince").alias("birth_state_province"),
+                    F.col("triCodeCurrent").alias("team_business_id"),
 
-                    col("_source_load_datetime"),
-                    col("_source_is_deleted"),
-                    col("_source"),
-                    col("_batch_id"))\
-                .withColumn("player_business_id", concat_ws("_", col("player_source_id"), col("_source")))\
-                .withColumn("player_id", sha1(col("player_business_id")))
+                    F.col("_source_load_datetime"),
+                    F.col("_source_is_deleted"),
+                    F.col("_source"),
+                    F.col("_batch_id"))\
+                .withColumn("player_business_id", F.concat_ws("_", F.col("player_source_id"), F.col("_source")))\
+                .withColumn("player_id", F.sha1(F.col("player_business_id")))
 
     df = df.join(hub_teams, "team_business_id", "left")\
                 .select(df["*"], hub_teams["team_id"], hub_teams["team_source_id"])
@@ -216,16 +215,16 @@ def hub_players(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
 
     df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams_roster")\
-        .filter(col("_batch_id") == lit(current_date))\
-        .select(col("player_id"),
-                col("player_business_id"),
-                col("player_source_id"),
+        .filter(F.col("_batch_id") == F.lit(current_date))\
+        .select(F.col("player_id"),
+                F.col("player_business_id"),
+                F.col("player_source_id"),
 
-                col("_source_load_datetime"),
-                col("_source"))
+                F.col("_source_load_datetime"),
+                F.col("_source"))
 
     try:
-        df_old = spark.read.parquet(DETAILED_PATH + f"hub")
+        df_old = spark.read.parquet(DETAILED_PATH + f"hub_players")
 
         df_new = df_new.join(df_old, "player_id", "leftanti")
         df_final = df_new.union(df_old).orderBy("_source_load_datetime", "player_id")
@@ -241,165 +240,165 @@ def sat_players(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
 
     increment = spark.read.parquet(OPERATIONAL_PATH + f"teams_roster")\
-        .filter(col("_batch_id") == lit(current_date))\
-        .select(col("player_id"),
-                col("team_business_id").alias("team_tri_code"),
-                col("headshot"),
-                col("first_name"),
-                col("last_name"),
-                col("sweater_number"),
-                col("position_code"),
-                col("shoots_catches"),
-                col("height_in_inches"),
-                col("weight_in_pounds"),
-                col("height_in_centimeters"),
-                col("weight_in_kilograms"),
-                col("birth_date"),
-                col("birth_city"),
-                col("birth_country"),
-                col("birth_state_province"),
+        .filter(F.col("_batch_id") == F.lit(current_date))\
+        .select(F.col("player_id"),
+                F.col("team_business_id").alias("team_tri_code"),
+                F.col("headshot"),
+                F.col("first_name"),
+                F.col("last_name"),
+                F.col("sweater_number"),
+                F.col("position_code"),
+                F.col("shoots_catches"),
+                F.col("height_in_inches"),
+                F.col("weight_in_pounds"),
+                F.col("height_in_centimeters"),
+                F.col("weight_in_kilograms"),
+                F.col("birth_date"),
+                F.col("birth_city"),
+                F.col("birth_country"),
+                F.col("birth_state_province"),
 
-                col("_source_is_deleted"),
-                col("_source_load_datetime").alias("effective_from"),
-                col("_source"))\
-        .withColumn("_data_hash", sha1(concat_ws("_", col("team_tri_code"),
-                                            col("headshot"),
-                                            col("first_name"),
-                                            col("last_name"),
-                                            col("sweater_number"),
-                                            col("position_code"),
-                                            col("shoots_catches"),
-                                            col("height_in_inches"),
-                                            col("weight_in_pounds"),
-                                            col("height_in_centimeters"),
-                                            col("weight_in_kilograms"),
-                                            col("birth_date"),
-                                            col("birth_city"),
-                                            col("birth_country"),
-                                            col("birth_state_province"),
-                                            col("_source_is_deleted"))))
+                F.col("_source_is_deleted"),
+                F.col("_source_load_datetime").alias("effective_from"),
+                F.col("_source"))\
+        .withColumn("_data_hash", F.sha1(F.concat_ws("_", F.col("team_tri_code"),
+                                            F.col("headshot"),
+                                            F.col("first_name"),
+                                            F.col("last_name"),
+                                            F.col("sweater_number"),
+                                            F.col("position_code"),
+                                            F.col("shoots_catches"),
+                                            F.col("height_in_inches"),
+                                            F.col("weight_in_pounds"),
+                                            F.col("height_in_centimeters"),
+                                            F.col("weight_in_kilograms"),
+                                            F.col("birth_date"),
+                                            F.col("birth_city"),
+                                            F.col("birth_country"),
+                                            F.col("birth_state_province"),
+                                            F.col("_source_is_deleted"))))
     
     try:    
         sat_players = spark.read.parquet(DETAILED_PATH + f"sat_players")
-        state = sat_players.filter(col("is_active") == "False")
+        state = sat_players.filter(F.col("is_active") == "False")
 
-        active = sat_players.filter(col("is_active") == "True")\
-            .select(col("player_id"),
-                    col("team_tri_code"),
-                    col("headshot"),
-                    col("first_name"),
-                    col("last_name"),
-                    col("sweater_number"),
-                    col("position_code"),
-                    col("shoots_catches"),
-                    col("height_in_inches"),
-                    col("weight_in_pounds"),
-                    col("height_in_centimeters"),
-                    col("weight_in_kilograms"),
-                    col("birth_date"),
-                    col("birth_city"),
-                    col("birth_country"),
-                    col("birth_state_province"),
+        active = sat_players.filter(F.col("is_active") == "True")\
+            .select(F.col("player_id"),
+                    F.col("team_tri_code"),
+                    F.col("headshot"),
+                    F.col("first_name"),
+                    F.col("last_name"),
+                    F.col("sweater_number"),
+                    F.col("position_code"),
+                    F.col("shoots_catches"),
+                    F.col("height_in_inches"),
+                    F.col("weight_in_pounds"),
+                    F.col("height_in_centimeters"),
+                    F.col("weight_in_kilograms"),
+                    F.col("birth_date"),
+                    F.col("birth_city"),
+                    F.col("birth_country"),
+                    F.col("birth_state_province"),
 
-                    col("_source_is_deleted"),
-                    col("effective_from"),
-                    col("_source"),
-                    col("_data_hash")) \
+                    F.col("_source_is_deleted"),
+                    F.col("effective_from"),
+                    F.col("_source"),
+                    F.col("_data_hash")) \
             .union(increment)
     except pyspark.errors.AnalysisException:
         active = increment
 
 
     scd_window = Window.partitionBy("player_id").orderBy("effective_from")
-    is_change = when(lag("_data_hash").over(scd_window) != col("_data_hash"), "True").otherwise("False")
+    is_change = F.when(F.lag("_data_hash").over(scd_window) != F.col("_data_hash"), "True").otherwise("False")
 
     row_changes = active.select(
-        col("player_id"),
-        col("team_tri_code"),
-        col("headshot"),
-        col("first_name"),
-        col("last_name"),
-        col("sweater_number"),
-        col("position_code"),
-        col("shoots_catches"),
-        col("height_in_inches"),
-        col("weight_in_pounds"),
-        col("height_in_centimeters"),
-        col("weight_in_kilograms"),
-        col("birth_date"),
-        col("birth_city"),
-        col("birth_country"),
-        col("birth_state_province"),
+        F.col("player_id"),
+        F.col("team_tri_code"),
+        F.col("headshot"),
+        F.col("first_name"),
+        F.col("last_name"),
+        F.col("sweater_number"),
+        F.col("position_code"),
+        F.col("shoots_catches"),
+        F.col("height_in_inches"),
+        F.col("weight_in_pounds"),
+        F.col("height_in_centimeters"),
+        F.col("weight_in_kilograms"),
+        F.col("birth_date"),
+        F.col("birth_city"),
+        F.col("birth_country"),
+        F.col("birth_state_province"),
 
-        col("effective_from"),
-        coalesce(is_change.cast("string"), lit("True")).alias("is_change"),
-        col("_data_hash"),
-        col("_source_is_deleted"),
-        col("_source")
+        F.col("effective_from"),
+        F.coalesce(is_change.cast("string"), F.lit("True")).alias("is_change"),
+        F.col("_data_hash"),
+        F.col("_source_is_deleted"),
+        F.col("_source")
     )
 
 
-    scd_window = Window.partitionBy("player_id").orderBy(col("effective_from").asc(), col("is_change").asc())
+    scd_window = Window.partitionBy("player_id").orderBy(F.col("effective_from").asc(), F.col("is_change").asc())
 
-    next_effective_from = lead("effective_from").over(scd_window)
-    version_count = F.sum(when(col("is_change") == "True", 1).otherwise(0)).over(scd_window.rangeBetween(Window.unboundedPreceding, 0))
+    next_effective_from = F.lead("effective_from").over(scd_window)
+    version_count = F.sum(F.when(F.col("is_change") == "True", 1).otherwise(0)).over(scd_window.rangeBetween(Window.unboundedPreceding, 0))
 
     row_versions = row_changes.select(
-                    col("player_id"),
-                    col("team_tri_code"),
-                    col("headshot"),
-                    col("first_name"),
-                    col("last_name"),
-                    col("sweater_number"),
-                    col("position_code"),
-                    col("shoots_catches"),
-                    col("height_in_inches"),
-                    col("weight_in_pounds"),
-                    col("height_in_centimeters"),
-                    col("weight_in_kilograms"),
-                    col("birth_date"),
-                    col("birth_city"),
-                    col("birth_country"),
-                    col("birth_state_province"),
+                    F.col("player_id"),
+                    F.col("team_tri_code"),
+                    F.col("headshot"),
+                    F.col("first_name"),
+                    F.col("last_name"),
+                    F.col("sweater_number"),
+                    F.col("position_code"),
+                    F.col("shoots_catches"),
+                    F.col("height_in_inches"),
+                    F.col("weight_in_pounds"),
+                    F.col("height_in_centimeters"),
+                    F.col("weight_in_kilograms"),
+                    F.col("birth_date"),
+                    F.col("birth_city"),
+                    F.col("birth_country"),
+                    F.col("birth_state_province"),
 
-                    col("effective_from"),
+                    F.col("effective_from"),
                     next_effective_from.cast("string").alias("effective_to"),
                     version_count.alias("_version"),
                     "_data_hash",
                     "_source_is_deleted",
                     "_source"
                 )\
-        .withColumn("effective_to", coalesce(expr("effective_to - interval 1 second"), lit("2040-01-01 00:00:00")))
+        .withColumn("effective_to", F.coalesce(F.expr("effective_to - interval 1 second"), F.lit("2040-01-01 00:00:00")))
 
 
     scd2 = row_versions.groupBy(
-            col("player_id"),
-            col("team_tri_code"),
-            col("headshot"),
-            col("first_name"),
-            col("last_name"),
-            col("sweater_number"),
-            col("position_code"),
-            col("shoots_catches"),
-            col("height_in_inches"),
-            col("weight_in_pounds"),
-            col("height_in_centimeters"),
-            col("weight_in_kilograms"),
-            col("birth_date"),
-            col("birth_city"),
-            col("birth_country"),
-            col("birth_state_province"),
+            F.col("player_id"),
+            F.col("team_tri_code"),
+            F.col("headshot"),
+            F.col("first_name"),
+            F.col("last_name"),
+            F.col("sweater_number"),
+            F.col("position_code"),
+            F.col("shoots_catches"),
+            F.col("height_in_inches"),
+            F.col("weight_in_pounds"),
+            F.col("height_in_centimeters"),
+            F.col("weight_in_kilograms"),
+            F.col("birth_date"),
+            F.col("birth_city"),
+            F.col("birth_country"),
+            F.col("birth_state_province"),
 
-            col("_source_is_deleted"),
-            col("_data_hash"),
-            col("_version")
+            F.col("_source_is_deleted"),
+            F.col("_data_hash"),
+            F.col("_version")
         ).agg(
-            F.min(col("effective_from")).alias("effective_from"),
-            F.max(col("effective_to")).alias("effective_to"),
+            F.min(F.col("effective_from")).alias("effective_from"),
+            F.max(F.col("effective_to")).alias("effective_to"),
             F.min_by("_source", "effective_from").alias("_source")
-        ).withColumn("is_active", when(col("effective_to") == "2040-01-01 00:00:00", "True").otherwise("False"))\
+        ).withColumn("is_active", F.when(F.col("effective_to") == "2040-01-01 00:00:00", "True").otherwise("False"))\
         .drop("_version")\
-        .withColumn("_version", sha1(concat_ws("_", col("_data_hash"), col("effective_from"))))
+        .withColumn("_version", F.sha1(F.concat_ws("_", F.col("_data_hash"), F.col("effective_from"))))
 
     try:
         union = state.union(scd2).orderBy("player_id", "effective_from")
@@ -415,77 +414,77 @@ def el_teams_roaster(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
 
     increment = spark.read.parquet(OPERATIONAL_PATH + f"teams_roster")\
-        .filter(col("_batch_id") == lit(current_date))\
-        .select(col("player_id"),
-                col("team_id"),
+        .filter(F.col("_batch_id") == F.lit(current_date))\
+        .select(F.col("player_id"),
+                F.col("team_id"),
 
-                col("_source_is_deleted"),
-                col("_source_load_datetime").alias("effective_from"),
-                col("_source"))\
-        .withColumn("_data_hash", sha1(concat_ws("_", col("team_id"),
-                                                    col("_source_is_deleted"))))
+                F.col("_source_is_deleted"),
+                F.col("_source_load_datetime").alias("effective_from"),
+                F.col("_source"))\
+        .withColumn("_data_hash", F.sha1(F.concat_ws("_", F.col("team_id"),
+                                                    F.col("_source_is_deleted"))))
     
     try:    
         el_teams_roaster = spark.read.parquet(DETAILED_PATH + f"el_teams_roaster")
-        state = el_teams_roaster.filter(col("is_active") == "False")
+        state = el_teams_roaster.filter(F.col("is_active") == "False")
 
-        active = el_teams_roaster.filter(col("is_active") == "True")\
-            .select(col("player_id"),
-                    col("team_id"),
+        active = el_teams_roaster.filter(F.col("is_active") == "True")\
+            .select(F.col("player_id"),
+                    F.col("team_id"),
 
-                    col("_source_is_deleted"),
-                    col("effective_from"),
-                    col("_source"),
-                    col("_data_hash"))\
+                    F.col("_source_is_deleted"),
+                    F.col("effective_from"),
+                    F.col("_source"),
+                    F.col("_data_hash"))\
             .union(increment)
     except:
         active = increment
 
     scd_window = Window.partitionBy("player_id").orderBy("effective_from")
-    is_change = when(lag("_data_hash").over(scd_window) != col("_data_hash"), "True").otherwise("False")
+    is_change = F.when(F.lag("_data_hash").over(scd_window) != F.col("_data_hash"), "True").otherwise("False")
 
     row_changes = active.select(
-        col("player_id"),
-        col("team_id"),
+        F.col("player_id"),
+        F.col("team_id"),
 
-        col("effective_from"),
-        coalesce(is_change.cast("string"), lit("True")).alias("is_change"),
-        col("_data_hash"),
-        col("_source_is_deleted"),
-        col("_source")
+        F.col("effective_from"),
+        F.coalesce(is_change.cast("string"), F.lit("True")).alias("is_change"),
+        F.col("_data_hash"),
+        F.col("_source_is_deleted"),
+        F.col("_source")
     )
 
 
-    scd_window = Window.partitionBy("player_id").orderBy(col("effective_from").asc(), col("is_change").asc())
+    scd_window = Window.partitionBy("player_id").orderBy(F.col("effective_from").asc(), F.col("is_change").asc())
 
-    next_effective_from = lead("effective_from").over(scd_window)
-    version_count = F.sum(when(col("is_change") == "True", 1).otherwise(0)).over(scd_window.rangeBetween(Window.unboundedPreceding, 0))
+    next_effective_from = F.lead("effective_from").over(scd_window)
+    version_count = F.sum(F.when(F.col("is_change") == "True", 1).otherwise(0)).over(scd_window.rangeBetween(Window.unboundedPreceding, 0))
 
     row_versions = row_changes.select(
-        col("player_id"),
-        col("team_id"),
-        col("effective_from"),
+        F.col("player_id"),
+        F.col("team_id"),
+        F.col("effective_from"),
         next_effective_from.cast("string").alias("effective_to"),
         version_count.alias("_version"),
         "_data_hash",
         "_source_is_deleted",
         "_source"
-    ).withColumn("effective_to", coalesce(expr("effective_to - interval 1 second"), lit("2040-01-01 00:00:00")))
+    ).withColumn("effective_to", F.coalesce(F.expr("effective_to - interval 1 second"), F.lit("2040-01-01 00:00:00")))
 
     scd2 = row_versions.groupBy(
-        col("player_id"),
-        col("team_id"),
+        F.col("player_id"),
+        F.col("team_id"),
 
-        col("_source_is_deleted"),
-        col("_data_hash"),
-        col("_version")
+        F.col("_source_is_deleted"),
+        F.col("_data_hash"),
+        F.col("_version")
     ).agg(
-        F.min(col("effective_from")).alias("effective_from"),
-        F.max(col("effective_to")).alias("effective_to"),
+        F.min(F.col("effective_from")).alias("effective_from"),
+        F.max(F.col("effective_to")).alias("effective_to"),
         F.min_by("_source", "effective_from").alias("_source")
-    ).withColumn("is_active", when(col("effective_to") == "2040-01-01 00:00:00", "True").otherwise("False"))\
+    ).withColumn("is_active", F.when(F.col("effective_to") == "2040-01-01 00:00:00", "True").otherwise("False"))\
     .drop("_version")\
-    .withColumn("_version", sha1(concat_ws("_", col("_data_hash"), col("effective_from"))))
+    .withColumn("_version", F.sha1(F.concat_ws("_", F.col("_data_hash"), F.col("effective_from"))))
 
     try:
         union = state.union(scd2).orderBy("player_id", "effective_from")
@@ -503,15 +502,15 @@ def pit_players(**kwargs):
     df_sat = spark.read.parquet(DETAILED_PATH + f"sat_players")
     df_el = spark.read.parquet(DETAILED_PATH + f"el_teams_roaster")
 
-    distinct_dates = df_sat.select(col("player_id"), col("effective_from"))\
-        .union(df_el.select(col("player_id"), col("effective_from")))\
+    distinct_dates = df_sat.select(F.col("player_id"), F.col("effective_from"))\
+        .union(df_el.select(F.col("player_id"), F.col("effective_from")))\
         .distinct()
     
     window_spec = Window.partitionBy("player_id").orderBy("effective_from")
-    effective_to = lead("effective_from").over(window_spec)
+    effective_to = F.lead("effective_from").over(window_spec)
 
     date_grid = distinct_dates.withColumn("effective_to",
-        when(effective_to.isNull(), "2040-01-01 00:00:00").otherwise(effective_to)
+        F.when(effective_to.isNull(), "2040-01-01 00:00:00").otherwise(effective_to)
     )
 
     data_versions = date_grid.join(df_sat.alias("df1"), (date_grid.effective_from == df_sat.effective_from) & (date_grid.player_id == df_sat.player_id), "left")\
@@ -520,17 +519,17 @@ def pit_players(**kwargs):
             date_grid.player_id,
             date_grid.effective_from,
             date_grid.effective_to,
-            when(date_grid.effective_to == "2040-01-01 00:00:00", True).otherwise(False).alias("is_active"),
-            col("df1._version").alias("sat_players_version"),
-            col("df2._version").alias("el_teams_roaster_version")
+            F.when(date_grid.effective_to == "2040-01-01 00:00:00", True).otherwise(False).alias("is_active"),
+            F.col("df1._version").alias("sat_players_version"),
+            F.col("df2._version").alias("el_teams_roaster_version")
         )
     
 
     fill = Window.partitionBy("player_id").orderBy("effective_from").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
-    result = data_versions.withColumn("sat_players_version", last("sat_players_version", ignorenulls=True).over(fill)) \
-        .withColumn("el_teams_roaster_version", last("el_teams_roaster_version", ignorenulls=True).over(fill)) \
-        .withColumn("is_active", when(col("is_active"), "True").otherwise("False")) \
+    result = data_versions.withColumn("sat_players_version", F.last("sat_players_version", ignorenulls=True).over(fill)) \
+        .withColumn("el_teams_roaster_version", F.last("el_teams_roaster_version", ignorenulls=True).over(fill)) \
+        .withColumn("is_active", F.when(F.col("is_active"), "True").otherwise("False")) \
         .select("player_id",
                 "effective_from",
                 "effective_to",
