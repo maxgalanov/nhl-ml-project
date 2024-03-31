@@ -11,6 +11,7 @@ OPERATIONAL_PATH = "/nhl_project/data/dwh/vault/operational/"
 DETAILED_PATH = "/nhl_project/data/dwh/vault/detailed/"
 COMMON_PATH = "/nhl_project/data/dwh/vault/common/"
 PROCESSED_PATH = "/nhl_project/data/processed/"
+REPORTING_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/nhl_project/data/dwh/vault/reporting/"
 
 
 spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
@@ -122,3 +123,4 @@ df_games['game_date'] = pd.to_datetime(df_games['game_date'])
 df_games['game_month'] = df_games['game_date'].dt.month
 
 df_games.to_csv(PROCESSED_PATH + 'games_statistics_wide.csv')
+teams_stat.toPandas().to_csv(REPORTING_PATH + 'teams_statistics.csv', index=False)
