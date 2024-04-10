@@ -227,10 +227,25 @@ def get_players_to_operational(**kwargs):
 def hub_players(**kwargs):
     current_date = kwargs["ds"]
 
-    spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
+    )
 
-    df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams_roster") \
-        .filter(F.col("_batch_id") == F.lit(current_date)) \
+    df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams_roster").filter(
+        F.col("_batch_id") == F.lit(current_date)
+    )
+
+    windowSpec = (
+        Window.partitionBy("player_id")
+        .orderBy(F.col("_source_load_datetime").desc())
+        .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    )
+
+    df_new = (
+        df_new.withColumn(
+            "_source_load_datetime", F.last("_source_load_datetime").over(windowSpec)
+        )
+        .withColumn("_source", F.last("_source").over(windowSpec))
         .select(
             F.col("player_id"),
             F.col("player_business_id"),
@@ -238,14 +253,20 @@ def hub_players(**kwargs):
             F.col("_source_load_datetime"),
             F.col("_source"),
         )
+        .distinct()
+    )
 
     try:
         df_old = spark.read.parquet(DETAILED_PATH + f"hub_players")
 
         df_new = df_new.join(df_old, "player_id", "leftanti")
-        df_final = df_new.union(df_old).orderBy("_source_load_datetime", "player_id")
-    except pyspark.errors.AnalysisException:
-        df_final = df_new.orderBy("_source_load_datetime", "player_id")
+        df_final = (
+            df_new.union(df_old)
+            .orderBy("_source_load_datetime", "player_id")
+            .distinct()
+        )
+    except:
+        df_final = df_new.orderBy("player_id", "_source_load_datetime").distinct()
 
     df_final.repartition(1).write.mode("overwrite").parquet(
         DETAILED_PATH + f"hub_players"

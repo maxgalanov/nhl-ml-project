@@ -61,7 +61,7 @@ def get_teams_stat_to_source(**kwargs):
     current_dt = datetime.strptime(current_date, "%Y-%m-%d").date()
     dates_last_week = []
 
-    for i in range(5):
+    for i in range(7):
         date = current_dt - timedelta(days=i)
         dates_last_week.append(date.strftime("%Y-%m-%d"))
 
@@ -382,9 +382,7 @@ def sat_teams_core(**kwargs):
     )
 
 
-def tl_teams_roaster(**kwargs):
-    current_date = kwargs["ds"]
-
+def tl_teams_stat(**kwargs):
     spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
 
     df = spark.read.parquet(OPERATIONAL_PATH + f"teams_stat").drop(
@@ -414,8 +412,6 @@ def tl_teams_roaster(**kwargs):
 
 
 def pit_teams(**kwargs):
-    current_date = kwargs["ds"]
-
     spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
 
     df_sat = spark.read.parquet(DETAILED_PATH + f"sat_teams_core")
@@ -496,3 +492,50 @@ def dm_teams(**kwargs):
         ).orderBy("team_id", "effective_from")
 
     df_dm.repartition(1).write.mode("overwrite").parquet(COMMON_PATH + f"dm_teams")
+
+
+task_get_teams_stat_to_source = PythonOperator(
+    task_id="get_teams_stat_to_source",
+    python_callable=get_teams_stat_to_source,
+    dag=dag,
+)
+
+task_get_teama_stat_to_staging = PythonOperator(
+    task_id="get_teama_stat_to_staging",
+    python_callable=get_teama_stat_to_staging,
+    dag=dag,
+)
+
+task_get_teama_stat_to_operational = PythonOperator(
+    task_id="get_teama_stat_to_operational",
+    python_callable=get_teama_stat_to_operational,
+    dag=dag,
+)
+
+task_sat_teams_core = PythonOperator(
+    task_id="sat_teams_core",
+    python_callable=sat_teams_core,
+    dag=dag,
+)
+
+task_tl_teams_stat = PythonOperator(
+    task_id="tl_teams_stat",
+    python_callable=tl_teams_stat,
+    dag=dag,
+)
+
+task_pit_teams = PythonOperator(
+    task_id="pit_teams",
+    python_callable=pit_teams,
+    dag=dag,
+)
+
+task_dm_teams = PythonOperator(
+    task_id="dm_teams",
+    python_callable=dm_teams,
+    dag=dag,
+)
+
+task_get_teams_stat_to_source >> task_get_teama_stat_to_staging >> task_get_teama_stat_to_operational
+task_get_teama_stat_to_operational >> [task_sat_teams_core, task_tl_teams_stat]
+task_sat_teams_core >> task_pit_teams >> task_dm_teams

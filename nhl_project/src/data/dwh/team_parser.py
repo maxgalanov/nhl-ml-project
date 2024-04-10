@@ -62,9 +62,11 @@ def get_teams_to_source(**kwargs):
     data_teams = get_information("en/team", "https://api.nhle.com/stats/rest/")
     df_teams_pd = pd.DataFrame(data_teams["data"])
 
-    df_teams = spark.createDataFrame(df_teams_pd) \
-        .withColumn("_source_load_datetime", F.lit(dt)) \
+    df_teams = (
+        spark.createDataFrame(df_teams_pd)
+        .withColumn("_source_load_datetime", F.lit(dt))
         .withColumn("_source", F.lit("API_NHL"))
+    )
 
     df_teams.repartition(1).write.mode("overwrite").parquet(
         SOURCE_PATH + f"teams/{current_date}"
@@ -104,14 +106,8 @@ def get_teams_to_staging(**kwargs):
         )
 
         df_changed = df_new.select(
-            F.col("id"),
-            F.col("fullName"),
-            F.col("triCode")
-        ).subtract(df_prev.select(
-            F.col("id"),
-            F.col("fullName"),
-            F.col("triCode"))
-        )
+            F.col("id"), F.col("fullName"), F.col("triCode")
+        ).subtract(df_prev.select(F.col("id"), F.col("fullName"), F.col("triCode")))
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
         df_final = df_changed.union(df_deleted).withColumn(
@@ -149,10 +145,25 @@ def get_teams_to_operational(**kwargs):
 def hub_teams(**kwargs):
     current_date = kwargs["ds"]
 
-    spark = SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
+    )
 
-    df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams") \
-        .filter(F.col("_batch_id") == F.lit(current_date)) \
+    df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams").filter(
+        F.col("_batch_id") == F.lit(current_date)
+    )
+
+    windowSpec = (
+        Window.partitionBy("team_id")
+        .orderBy(F.col("_source_load_datetime").desc())
+        .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    )
+
+    df_new = (
+        df_new.withColumn(
+            "_source_load_datetime", F.last("_source_load_datetime").over(windowSpec)
+        )
+        .withColumn("_source", F.last("_source").over(windowSpec))
         .select(
             F.col("team_id"),
             F.col("team_business_id"),
@@ -160,6 +171,7 @@ def hub_teams(**kwargs):
             F.col("_source_load_datetime"),
             F.col("_source"),
         )
+    )
 
     try:
         df_old = spark.read.parquet(DETAILED_PATH + f"hub_teams")
@@ -169,6 +181,32 @@ def hub_teams(**kwargs):
     except pyspark.errors.AnalysisException:
         df_final = df_new.orderBy("_source_load_datetime", "team_id")
 
-    df_final.repartition(1).write.mode("overwrite").parquet(
-        DETAILED_PATH + f"hub_teams"
-    )
+    df_final.repartition(1).write.mode("overwrite").parquet(DETAILED_PATH + f"hub_teams")
+
+
+task_get_teams_to_source = PythonOperator(
+    task_id="get_teams_to_source",
+    python_callable=get_teams_to_source,
+    dag=dag,
+)
+
+task_get_teams_to_staging = PythonOperator(
+    task_id="get_teams_to_staging",
+    python_callable=get_teams_to_staging,
+    dag=dag,
+)
+
+task_get_teams_to_operational = PythonOperator(
+    task_id="get_teams_to_operational",
+    python_callable=get_teams_to_operational,
+    dag=dag,
+)
+
+task_hub_teams = PythonOperator(
+    task_id="hub_teams",
+    python_callable=hub_teams,
+    dag=dag,
+)
+
+task_get_teams_to_source >> task_get_teams_to_staging >> task_get_teams_to_operational
+task_get_teams_to_operational >> task_hub_teams

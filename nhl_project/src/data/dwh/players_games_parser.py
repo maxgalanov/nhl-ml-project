@@ -103,13 +103,13 @@ def get_players_games_stat_to_source(**kwargs):
 def get_penultimate_file_name(directory):
     files = os.listdir(directory)
     files = [f for f in files if os.path.isdir(os.path.join(directory, f))]
-    
+
     if len(files) < 2:
         return None
-    
+
     files.sort(key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)
     penultimate_file = files[1]
-    
+
     return penultimate_file
 
 
@@ -231,7 +231,8 @@ def get_players_games_stat_to_operational(**kwargs):
     df = spark.read.parquet(STAGING_PATH + f"players_games_stat/{current_date}")
     hub_teams = spark.read.parquet(DETAILED_PATH + f"hub_teams")
 
-    df = df.select(
+    df = (
+        df.select(
             F.col("gameId").cast("string").alias("game_source_id"),
             F.col("playerId").cast("string").alias("player_source_id"),
             F.col("teamAbbrev").cast("string").alias("team_business_id"),
@@ -264,33 +265,44 @@ def get_players_games_stat_to_operational(**kwargs):
             F.col("_source_is_deleted").cast("string"),
             F.col("_source").cast("string"),
             F.col("_batch_id").cast("string"),
-        ).withColumn(
+        )
+        .withColumn(
             "game_business_id",
             F.concat_ws("_", F.col("game_source_id"), F.col("_source")),
-        ).withColumn(
+        )
+        .withColumn(
             "player_business_id",
             F.concat_ws("_", F.col("player_source_id"), F.col("_source")),
-        ).withColumn(
+        )
+        .withColumn(
             "game_id",
             F.sha1(F.concat_ws("_", F.col("game_source_id"), F.col("_source"))),
-        ).withColumn(
+        )
+        .withColumn(
             "player_id",
             F.sha1(F.concat_ws("_", F.col("player_source_id"), F.col("_source"))),
         )
+    )
 
-    df = df.alias("df1") \
+    df = (
+        df.alias("df1")
         .join(
             hub_teams.alias("df2"),
             df.team_business_id == hub_teams.team_business_id,
             "left",
-        ).select(df["*"], hub_teams["team_id"].alias("team_id"))
+        )
+        .select(df["*"], hub_teams["team_id"].alias("team_id"))
+    )
 
-    df = df.alias("df3") \
+    df = (
+        df.alias("df3")
         .join(
             hub_teams.alias("df4"),
             F.col("df3.opponent_team_business_id") == F.col("df4.team_business_id"),
             "left",
-        ).select(df["*"], F.col("df4.team_id").alias("opponent_team_id"))
+        )
+        .select(df["*"], F.col("df4.team_id").alias("opponent_team_id"))
+    )
 
     df.repartition(1).write.mode("append").parquet(
         OPERATIONAL_PATH + f"players_games_stat"
@@ -298,8 +310,6 @@ def get_players_games_stat_to_operational(**kwargs):
 
 
 def tl_players_games_stat(**kwargs):
-    current_date = kwargs["ds"]
-
     spark = (
         SparkSession.builder.master("local[*]")
         .appName("parse_players_games_stat")
@@ -312,9 +322,11 @@ def tl_players_games_stat(**kwargs):
         "game_id", "player_id", "team_id", "opponent_team_id"
     ).orderBy(F.col("_source_load_datetime").desc())
 
-    result_df = df.withColumn("rank", F.row_number().over(window_spec)) \
-        .filter("rank = 1") \
+    result_df = (
+        df.withColumn("rank", F.row_number().over(window_spec))
+        .filter("rank = 1")
         .drop("rank")
+    )
 
     result_df = result_df.dropDuplicates(
         ["game_id", "player_id", "team_id", "opponent_team_id"]
@@ -323,3 +335,35 @@ def tl_players_games_stat(**kwargs):
     result_df.repartition(1).write.mode("overwrite").parquet(
         DETAILED_PATH + f"tl_players_games_stat"
     )
+
+
+task_get_players_games_stat_to_source = PythonOperator(
+    task_id="get_players_games_stat_to_source",
+    python_callable=get_players_games_stat_to_source,
+    dag=dag,
+)
+
+task_get_players_games_stat_to_staging = PythonOperator(
+    task_id="get_players_games_stat_to_staging",
+    python_callable=get_players_games_stat_to_staging,
+    dag=dag,
+)
+
+task_get_players_games_stat_to_operational = PythonOperator(
+    task_id="get_players_games_stat_to_operational",
+    python_callable=get_players_games_stat_to_operational,
+    dag=dag,
+)
+
+task_tl_players_games_stat = PythonOperator(
+    task_id="tl_players_games_stat",
+    python_callable=tl_players_games_stat,
+    dag=dag,
+)
+
+(
+    task_get_players_games_stat_to_source
+    >> task_get_players_games_stat_to_staging
+    >> task_get_players_games_stat_to_operational
+)
+task_get_players_games_stat_to_operational >> task_tl_players_games_stat
