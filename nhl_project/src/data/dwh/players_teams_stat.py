@@ -472,7 +472,7 @@ def dm_teams(**kwargs):
     df_dm = df_hub.join(df_pit, df_hub.team_id == df_pit.team_id, "inner") \
         .join(
             df_sat,
-            (df_pit.sat_teams_name_version == df_sat._version)
+            (df_pit.sat_teams_core_version == df_sat._version)
             & (df_pit.team_id == df_sat.team_id),
             "left",
         ).select(
