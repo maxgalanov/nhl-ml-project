@@ -4,6 +4,7 @@ import os
 from datetime import timedelta, datetime
 
 from airflow.models import DAG
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
@@ -32,12 +33,6 @@ dag = DAG(
     description="ETL process for getting list of NHL teams",
 )
 
-SOURCE_PATH = "/nhl_project/data/dwh/source/"
-STAGING_PATH = "/nhl_project/data/dwh/vault/staging/"
-OPERATIONAL_PATH = "/nhl_project/data/dwh/vault/operational/"
-DETAILED_PATH = "/nhl_project/data/dwh/vault/detailed/"
-COMMON_PATH = "/nhl_project/data/dwh/vault/common/"
-
 
 def get_information(endpoint, base_url="https://api-web.nhle.com"):
     base_url = f"{base_url}"
@@ -56,6 +51,15 @@ def get_information(endpoint, base_url="https://api-web.nhle.com"):
 def get_teams_to_source(**kwargs):
     current_date = kwargs["ds"]
 
+    postgres_hook = PostgresHook(postgres_conn_id='hse_postgres')
+    connection = postgres_hook.get_connection('hse_postgres')
+
+    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
+    properties = {
+        "user": connection.login,
+        "password": connection.password
+    }
+
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
     dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -68,36 +72,82 @@ def get_teams_to_source(**kwargs):
         .withColumn("_source", F.lit("API_NHL"))
     )
 
-    df_teams.repartition(1).write.mode("overwrite").parquet(
-        SOURCE_PATH + f"teams/{current_date}"
-    )
+    df_teams.write \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", f"dwh_source.teams_{current_date}") \
+        .option("properties", properties) \
+        .mode("overwrite") \
+        .save()
+    
+    create_metadata_table_sql = """
+    CREATE TABLE IF NOT EXISTS public.metadata_table (
+        table_name VARCHAR(255),
+        updated_at TIMESTAMP
+    );
+    """
+    postgres_hook.run(create_metadata_table_sql)
+
+    insert_metadata_sql = f"""
+    INSERT INTO public.metadata_table (table_name, updated_at)
+    VALUES ('dwh_source.teams', '{dt}');
+    """
+    postgres_hook.run(insert_metadata_sql)
 
 
-def get_penultimate_file_name(directory):
-    files = os.listdir(directory)
-    files = [f for f in files if os.path.isdir(os.path.join(directory, f))]
+def get_penultimate_table_name(postgres_hook, table_name):
+    penultimate_table_query = f"""
+    SELECT updated_at
+    FROM public.metadata_table
+    WHERE table_name = '{table_name}'
+    ORDER BY updated_at DESC
+    OFFSET 1 LIMIT 1;
+    """
 
-    if len(files) < 2:
-        return None
+    connection = postgres_hook.get_conn()
+    cursor = connection.cursor()
+    cursor.execute(penultimate_table_query)
+    result = cursor.fetchone()
+    cursor.close()
+    connection.close()
 
-    files.sort(key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)
-    penultimate_file = files[1]
-
-    return penultimate_file
+    return result[0] if result else None
 
 
 def get_teams_to_staging(**kwargs):
     current_date = kwargs["ds"]
 
+    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
+    connection = postgres_hook.get_connection('your_connection_id')
+
+    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
+    properties = {
+        "user": connection.login,
+        "password": connection.password
+    }
+
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
-    df_new = spark.read.parquet(SOURCE_PATH + f"teams/{current_date}")
+    df_new = spark.read \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", f"dwh_source.teams_{current_date}") \
+        .option("properties", properties) \
+        .load()
+
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
-    prev_file_name = get_penultimate_file_name(SOURCE_PATH + "teams")
+    prev_table_date = get_penultimate_table_name(postgres_hook, 'dwh_source.teams')
 
-    if prev_file_name:
-        df_prev = spark.read.parquet(SOURCE_PATH + f"teams/{prev_file_name}")
+    if prev_table_date:
+
+        df_prev = spark.read \
+            .format("jdbc") \
+            .option("url", jdbc_url) \
+            .option("dbtable", f"dwh_source.teams_{prev_table_date[:10]}") \
+            .option("properties", properties) \
+            .load()
+
         df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
 
         df_deleted = df_prev.join(df_new, "id", "leftanti").withColumn(
@@ -116,17 +166,36 @@ def get_teams_to_staging(**kwargs):
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
-    df_final.repartition(1).write.mode("overwrite").parquet(
-        STAGING_PATH + f"teams/{current_date}"
-    )
+    df_final.write \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", f"dwh_staging.teams_{current_date}") \
+        .option("properties", properties) \
+        .mode("overwrite") \
+        .save()
 
 
 def get_teams_to_operational(**kwargs):
     current_date = kwargs["ds"]
 
+    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
+    connection = postgres_hook.get_connection('your_connection_id')
+
+    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
+    properties = {
+        "user": connection.login,
+        "password": connection.password
+    }
+
     spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
 
-    df = spark.read.parquet(STAGING_PATH + f"teams/{current_date}")
+    df = spark.read \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", f"dwh_staging.teams_{current_date}") \
+        .option("properties", properties) \
+        .load()
+
     df = df.select(
         F.col("id").alias("team_source_id"),
         F.col("fullName").alias("team_full_name"),
@@ -139,17 +208,39 @@ def get_teams_to_operational(**kwargs):
         "team_id", F.sha1(F.concat_ws("_", F.col("team_source_id"), F.col("_source")))
     )
 
-    df.repartition(1).write.mode("append").parquet(OPERATIONAL_PATH + f"teams")
+    df.write \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", "dwh_operational.teams") \
+        .option("properties", properties) \
+        .mode("append") \
+        .save()
 
 
 def hub_teams(**kwargs):
     current_date = kwargs["ds"]
 
+    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
+    connection = postgres_hook.get_connection('your_connection_id')
+
+    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
+    properties = {
+        "user": connection.login,
+        "password": connection.password
+    }
+
     spark = (
         SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
     )
 
-    df_new = spark.read.parquet(OPERATIONAL_PATH + f"teams").filter(
+    df_new = spark.read \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", "dwh_operational.teams") \
+        .option("properties", properties) \
+        .load()
+
+    df_new = df_new.filter(
         F.col("_batch_id") == F.lit(current_date)
     )
 
@@ -174,14 +265,25 @@ def hub_teams(**kwargs):
     )
 
     try:
-        df_old = spark.read.parquet(DETAILED_PATH + f"hub_teams")
+        df_old = spark.read \
+            .format("jdbc") \
+            .option("url", jdbc_url) \
+            .option("dbtable", "dwh_detailed.hub_teams") \
+            .option("properties", properties) \
+            .load()
 
         df_new = df_new.join(df_old, "team_id", "leftanti")
         df_final = df_new.union(df_old).orderBy("_source_load_datetime", "team_id")
     except pyspark.errors.AnalysisException:
         df_final = df_new.orderBy("_source_load_datetime", "team_id")
 
-    df_final.repartition(1).write.mode("overwrite").parquet(DETAILED_PATH + f"hub_teams")
+    df_final.write \
+        .format("jdbc") \
+        .option("url", jdbc_url) \
+        .option("dbtable", "dwh_detailed.hub_teams") \
+        .option("properties", properties) \
+        .mode("overwrite") \
+        .save()
 
 
 task_get_teams_to_source = PythonOperator(
