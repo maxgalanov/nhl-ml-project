@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 import os
 from datetime import timedelta, datetime
+import json
 
 from airflow.models import DAG
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -54,10 +55,15 @@ def get_teams_to_source(**kwargs):
     postgres_hook = PostgresHook(postgres_conn_id='hse_postgres')
     connection = postgres_hook.get_connection('hse_postgres')
 
+    extra_options = json.loads(connection.extra_dejson)
+
     jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
     properties = {
         "user": connection.login,
-        "password": connection.password
+        "password": connection.password,
+        "driver": extra_options.get("driver"),
+        "sslmode": extra_options.get("sslmode"),
+        "sslrootcert": extra_options.get("sslrootcert")
     }
 
     spark = (
