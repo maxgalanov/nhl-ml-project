@@ -66,6 +66,9 @@ def get_teams_to_source(**kwargs):
     logger.info(extra_options)
 
     jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
+
+    logger.info(jdbc_url)
+
     properties = {
         "user": connection.login,
         "password": connection.password,
@@ -97,13 +100,24 @@ def get_teams_to_source(**kwargs):
 
     logger.info("Начинаю запись данных")
 
-    df_teams.write \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", f"dwh_source.teams_{current_date}") \
-        .option("properties", properties) \
-        .mode("overwrite") \
+    password = os.getenv('HSE_DB_PASSWORD')
+
+    logger.info(password)
+
+    df_teams.write.mode('overwrite')\
+        .format("jdbc")\
+        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db")\
+        .option("driver", "org.postgresql.Driver").option("dbtable", f"dwh_source.teams_{current_date}")\
+        .option("user", "maxglnv").option("password", password)\
         .save()
+
+    # df_teams.write \
+    #     .format("jdbc") \
+    #     .option("url", jdbc_url) \
+    #     .option("dbtable", f"dwh_source.teams_{current_date}") \
+    #     .option("properties", properties) \
+    #     .mode("overwrite") \
+    #     .save()
     
     logger.info("Запись данных в базу данных успешно завершена")
 
