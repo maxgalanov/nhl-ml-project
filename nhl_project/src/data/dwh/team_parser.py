@@ -60,7 +60,13 @@ def get_teams_to_source(**kwargs):
         "password": connection.password
     }
 
-    spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
+    spark = (
+        SparkSession.builder
+        .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
+        .master("local[*]")
+        .appName("parse_teams")
+        .getOrCreate()
+    )
 
     dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data_teams = get_information("en/team", "https://api.nhle.com/stats/rest/")
@@ -126,7 +132,13 @@ def get_teams_to_staging(**kwargs):
         "password": connection.password
     }
 
-    spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
+    spark = (
+        SparkSession.builder
+        .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
+        .master("local[*]")
+        .appName("parse_teams")
+        .getOrCreate()
+    )
 
     df_new = spark.read \
         .format("jdbc") \
@@ -187,7 +199,13 @@ def get_teams_to_operational(**kwargs):
         "password": connection.password
     }
 
-    spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
+    spark = (
+        SparkSession.builder
+        .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
+        .master("local[*]")
+        .appName("parse_teams")
+        .getOrCreate()
+    )
 
     df = spark.read \
         .format("jdbc") \
@@ -230,7 +248,11 @@ def hub_teams(**kwargs):
     }
 
     spark = (
-        SparkSession.builder.master("local[*]").appName("teams_to_dwh").getOrCreate()
+        SparkSession.builder
+        .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
+        .master("local[*]")
+        .appName("parse_teams")
+        .getOrCreate()
     )
 
     df_new = spark.read \
