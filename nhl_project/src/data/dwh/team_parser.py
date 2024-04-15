@@ -55,7 +55,7 @@ def get_teams_to_source(**kwargs):
     postgres_hook = PostgresHook(postgres_conn_id='hse_postgres')
     connection = postgres_hook.get_connection('hse_postgres')
 
-    extra_options = json.loads(connection.extra_dejson)
+    extra_options = connection.extra_dejson
 
     jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
     properties = {
