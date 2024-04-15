@@ -108,10 +108,13 @@ def get_teams_to_source(**kwargs):
     password = Variable.get("HSE_DB_PASSWORD")
     logger.info(password)
 
+    table_name = f"dwh_source.teams_{current_date.replace('-', '_')}"
+    logger.info(table_name)
+
     df_teams.write.mode('overwrite')\
         .format("jdbc")\
         .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db")\
-        .option("driver", "org.postgresql.Driver").option("dbtable", f"dwh_source.teams_{current_date}")\
+        .option("driver", "org.postgresql.Driver").option("dbtable", table_name)\
         .option("user", "maxglnv").option("password", password)\
         .save()
 
