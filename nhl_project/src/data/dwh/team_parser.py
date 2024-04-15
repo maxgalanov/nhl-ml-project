@@ -2,7 +2,8 @@ import pandas as pd
 import requests
 import os
 from datetime import timedelta, datetime
-import json
+
+import logging
 
 from airflow.models import DAG
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -50,6 +51,11 @@ def get_information(endpoint, base_url="https://api-web.nhle.com"):
 
 
 def get_teams_to_source(**kwargs):
+
+    logger = logging.getLogger("airflow.task")
+
+    logger.info("Запуск задачи получения данных о командах")
+
     current_date = kwargs["ds"]
 
     postgres_hook = PostgresHook(postgres_conn_id='hse_postgres')
@@ -57,14 +63,19 @@ def get_teams_to_source(**kwargs):
 
     extra_options = connection.extra_dejson
 
+    logger.info(extra_options)
+
     jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
     properties = {
         "user": connection.login,
         "password": connection.password,
+        "ssl": "true",
         "driver": extra_options.get("driver"),
         "sslmode": extra_options.get("sslmode"),
         "sslrootcert": extra_options.get("sslrootcert")
     }
+
+    logger.info(properties)
 
     spark = (
         SparkSession.builder
@@ -84,6 +95,8 @@ def get_teams_to_source(**kwargs):
         .withColumn("_source", F.lit("API_NHL"))
     )
 
+    logger.info("Начинаю запись данных")
+
     df_teams.write \
         .format("jdbc") \
         .option("url", jdbc_url) \
@@ -92,18 +105,26 @@ def get_teams_to_source(**kwargs):
         .mode("overwrite") \
         .save()
     
+    logger.info("Запись данных в базу данных успешно завершена")
+
     create_metadata_table_sql = """
     CREATE TABLE IF NOT EXISTS public.metadata_table (
         table_name VARCHAR(255),
         updated_at TIMESTAMP
     );
     """
+
+    logger.info("Создаю таблицу с метаданными, если не существует")
+
     postgres_hook.run(create_metadata_table_sql)
 
     insert_metadata_sql = f"""
     INSERT INTO public.metadata_table (table_name, updated_at)
     VALUES ('dwh_source.teams', '{dt}');
     """
+
+    logger.info("Начинаю запись метаданных")
+
     postgres_hook.run(insert_metadata_sql)
 
 
