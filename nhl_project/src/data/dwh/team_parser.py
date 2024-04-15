@@ -6,6 +6,7 @@ from datetime import timedelta, datetime
 import logging
 
 from airflow.models import DAG
+from airflow.models import Variable
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
@@ -99,10 +100,13 @@ def get_teams_to_source(**kwargs):
     )
 
     logger.info("Начинаю запись данных")
+    
 
     password = os.getenv('HSE_DB_PASSWORD')
+    logger.info('password', password)
 
-    logger.info(password)
+    password = Variable.get("HSE_DB_PASSWORD")
+    logger.info('password', password)
 
     df_teams.write.mode('overwrite')\
         .format("jdbc")\
