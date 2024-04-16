@@ -131,7 +131,7 @@ def get_teams_to_source(**kwargs):
     data = [("dwh_source.teams", dt)]
     df_meta = spark.createDataFrame(data, schema=["table_name", "updated_at"])
 
-    write_table_to_pg(df_meta, "append", "dwh_source.metadata_table")
+    write_table_to_pg(df_meta, spark, "append", "dwh_source.metadata_table")
     logger.info("Запись метаданных успешно завершена")
 
 
@@ -178,7 +178,7 @@ def get_teams_to_staging(**kwargs):
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
-    write_table_to_pg(df_final, "overwrite", "dwh_staging.teams")
+    write_table_to_pg(df_final, spark, "overwrite", "dwh_staging.teams")
 
 
 def get_teams_to_operational(**kwargs):
@@ -203,7 +203,7 @@ def get_teams_to_operational(**kwargs):
         "team_id", F.sha1(F.concat_ws("_", F.col("team_source_id"), F.col("_source")))
     )
 
-    write_table_to_pg(df, "append", "dwh_operational.teams")
+    write_table_to_pg(df, spark, "append", "dwh_operational.teams")
 
 
 def hub_teams(**kwargs):
@@ -250,7 +250,7 @@ def hub_teams(**kwargs):
     except:
         df_final = df_new.orderBy("_source_load_datetime", "team_id")
 
-    write_table_to_pg(df_final, "overwrite", "dwh_detailed.hub_teams")
+    write_table_to_pg(df_final, spark, "overwrite", "dwh_detailed.hub_teams")
 
 
 task_get_teams_to_source = PythonOperator(
