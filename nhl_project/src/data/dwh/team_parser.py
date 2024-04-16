@@ -50,40 +50,47 @@ def get_information(endpoint, base_url="https://api-web.nhle.com"):
     else:
         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
 
+def read_table_from_pg(spark, table_name):
+    password = Variable.get("HSE_DB_PASSWORD")
+
+    df_table = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+        .option("driver", "org.postgresql.Driver") \
+        .option("dbtable", table_name) \
+        .option("user", "maxglnv") \
+        .option("password", password) \
+        .load()
+
+    return df_table
+
+
+def write_table_to_pg(df, write_mode, table_name):
+    password = Variable.get("HSE_DB_PASSWORD")
+
+    df.write \
+        .mode(write_mode) \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+        .option("driver", "org.postgresql.Driver") \
+        .option("dbtable", table_name) \
+        .option("user", "maxglnv") \
+        .option("password", password) \
+        .save()
+
 
 def get_teams_to_source(**kwargs):
 
     logger = logging.getLogger("airflow.task")
-
     logger.info("Запуск задачи получения данных о командах")
 
     current_date = kwargs["ds"]
 
-    postgres_hook = PostgresHook(postgres_conn_id='hse_postgres')
-    connection = postgres_hook.get_connection('hse_postgres')
-
-    extra_options = connection.extra_dejson
-
-    logger.info(extra_options)
-
-    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
-
-    logger.info(jdbc_url)
-
-    properties = {
-        "user": connection.login,
-        "password": connection.password,
-        "ssl": "true",
-        "driver": extra_options.get("driver"),
-        "sslmode": extra_options.get("sslmode"),
-        "sslrootcert": extra_options.get("sslrootcert")
-    }
-
-    logger.info(properties)
-
     spark = (
-        SparkSession.builder
-        .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
+        SparkSession.builder.config(
+            "spark.jars",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+        )
         .master("local[*]")
         .appName("parse_teams")
         .getOrCreate()
@@ -100,86 +107,36 @@ def get_teams_to_source(**kwargs):
     )
 
     logger.info("Начинаю запись данных")
-    
 
-    # password = os.getenv('HSE_DB_PASSWORD')
-    # logger.info('password', password)
-
-    password = Variable.get("HSE_DB_PASSWORD")
-    logger.info(password)
 
     table_name = f"dwh_source.teams_{current_date.replace('-', '_')}"
     logger.info(table_name)
 
-    df_teams.write.mode('overwrite')\
-        .format("jdbc")\
-        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db")\
-        .option("driver", "org.postgresql.Driver").option("dbtable", table_name)\
-        .option("user", "maxglnv").option("password", password)\
-        .save()
-
-    # df_teams.write \
-    #     .format("jdbc") \
-    #     .option("url", jdbc_url) \
-    #     .option("dbtable", f"dwh_source.teams_{current_date}") \
-    #     .option("properties", properties) \
-    #     .mode("overwrite") \
-    #     .save()
-    
+    write_table_to_pg(df_teams, "overwrite", table_name)
     logger.info("Запись данных в базу данных успешно завершена")
-
-    create_metadata_table_sql = """
-    CREATE TABLE IF NOT EXISTS public.metadata_table (
-        table_name VARCHAR(255),
-        updated_at TIMESTAMP
-    );
-    """
-
-    logger.info("Создаю таблицу с метаданными, если не существует")
-
-    postgres_hook.run(create_metadata_table_sql)
-
-    insert_metadata_sql = f"""
-    INSERT INTO public.metadata_table (table_name, updated_at)
-    VALUES ('dwh_source.teams', '{dt}');
-    """
 
     logger.info("Начинаю запись метаданных")
 
-    postgres_hook.run(insert_metadata_sql)
+    data = [("dwh_source.teams", dt)]
+    df_meta = spark.createDataFrame(data, schema=["table_name", "updated_at"])
+
+    write_table_to_pg(df_meta, "append", "dwh_source.metadata_table")
+    logger.info("Запись метаданных успешно завершена")
 
 
-def get_penultimate_table_name(postgres_hook, table_name):
-    penultimate_table_query = f"""
-    SELECT updated_at
-    FROM public.metadata_table
-    WHERE table_name = '{table_name}'
-    ORDER BY updated_at DESC
-    OFFSET 1 LIMIT 1;
-    """
+def get_penultimate_table_name(spark, table_name):
 
-    connection = postgres_hook.get_conn()
-    cursor = connection.cursor()
-    cursor.execute(penultimate_table_query)
-    result = cursor.fetchone()
-    cursor.close()
-    connection.close()
+    df_meta = read_table_from_pg(spark, "dwh_source.metadata_table")
+    
+    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(F.col("updated_at").desc())
+    second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
 
-    return result[0] if result else None
+    return second_to_last_date
 
 
 def get_teams_to_staging(**kwargs):
     current_date = kwargs["ds"]
 
-    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
-    connection = postgres_hook.get_connection('your_connection_id')
-
-    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
-    properties = {
-        "user": connection.login,
-        "password": connection.password
-    }
-
     spark = (
         SparkSession.builder
         .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
@@ -188,65 +145,32 @@ def get_teams_to_staging(**kwargs):
         .getOrCreate()
     )
 
-    df_new = spark.read \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", f"dwh_source.teams_{current_date}") \
-        .option("properties", properties) \
-        .load()
-
+    df_new = read_table_from_pg(spark, f"dwh_source.teams_{current_date.replace('-', '_')}")
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
-    prev_table_date = get_penultimate_table_name(postgres_hook, 'dwh_source.teams')
+    prev_table_name = get_penultimate_table_name(spark, "dwh_source.teams")
 
-    if prev_table_date:
-
-        df_prev = spark.read \
-            .format("jdbc") \
-            .option("url", jdbc_url) \
-            .option("dbtable", f"dwh_source.teams_{prev_table_date[:10]}") \
-            .option("properties", properties) \
-            .load()
-
+    if prev_table_name:
+        df_prev = read_table_from_pg(spark, f"dwh_source.teams_{prev_table_name[:10].replace('-', '_')}")
         df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
 
         df_deleted = df_prev.join(df_new, "id", "leftanti").withColumn(
-            "_source_load_datetime",
-            F.lit(df_new.select("_source_load_datetime").first()[0]),
+            "_source_load_datetime", F.lit(df_new.select("_source_load_datetime").first()[0])
         )
 
-        df_changed = df_new.select(
-            F.col("id"), F.col("fullName"), F.col("triCode")
-        ).subtract(df_prev.select(F.col("id"), F.col("fullName"), F.col("triCode")))
+        df_changed = df_new.select(F.col("id"), F.col("fullName"), F.col("triCode")).subtract(
+            df_prev.select(F.col("id"), F.col("fullName"), F.col("triCode"))
+        )
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
-        df_final = df_changed.union(df_deleted).withColumn(
-            "_batch_id", F.lit(current_date)
-        )
+        df_final = df_changed.union(df_deleted).withColumn("_batch_id", F.lit(current_date))
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
-    df_final.write \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", f"dwh_staging.teams_{current_date}") \
-        .option("properties", properties) \
-        .mode("overwrite") \
-        .save()
+    write_table_to_pg(df_final, "overwrite", "dwh_staging.teams")
 
 
 def get_teams_to_operational(**kwargs):
-    current_date = kwargs["ds"]
-
-    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
-    connection = postgres_hook.get_connection('your_connection_id')
-
-    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
-    properties = {
-        "user": connection.login,
-        "password": connection.password
-    }
-
     spark = (
         SparkSession.builder
         .config("spark.jars", "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar")
@@ -255,13 +179,7 @@ def get_teams_to_operational(**kwargs):
         .getOrCreate()
     )
 
-    df = spark.read \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", f"dwh_staging.teams_{current_date}") \
-        .option("properties", properties) \
-        .load()
-
+    df = read_table_from_pg(spark, "dwh_staging.teams")
     df = df.select(
         F.col("id").alias("team_source_id"),
         F.col("fullName").alias("team_full_name"),
@@ -274,26 +192,11 @@ def get_teams_to_operational(**kwargs):
         "team_id", F.sha1(F.concat_ws("_", F.col("team_source_id"), F.col("_source")))
     )
 
-    df.write \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", "dwh_operational.teams") \
-        .option("properties", properties) \
-        .mode("append") \
-        .save()
+    write_table_to_pg(df, "append", "dwh_operational.teams")
 
 
 def hub_teams(**kwargs):
     current_date = kwargs["ds"]
-
-    postgres_hook = PostgresHook(postgres_conn_id='your_connection_id')
-    connection = postgres_hook.get_connection('your_connection_id')
-
-    jdbc_url = f"jdbc:postgresql://{connection.host}:{connection.port}/{connection.schema}"
-    properties = {
-        "user": connection.login,
-        "password": connection.password
-    }
 
     spark = (
         SparkSession.builder
@@ -303,13 +206,7 @@ def hub_teams(**kwargs):
         .getOrCreate()
     )
 
-    df_new = spark.read \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", "dwh_operational.teams") \
-        .option("properties", properties) \
-        .load()
-
+    df_new = read_table_from_pg(spark, "dwh_operational.teams")
     df_new = df_new.filter(
         F.col("_batch_id") == F.lit(current_date)
     )
@@ -335,25 +232,14 @@ def hub_teams(**kwargs):
     )
 
     try:
-        df_old = spark.read \
-            .format("jdbc") \
-            .option("url", jdbc_url) \
-            .option("dbtable", "dwh_detailed.hub_teams") \
-            .option("properties", properties) \
-            .load()
+        df_old = read_table_from_pg(spark, "dwh_detailed.hub_teams")
 
         df_new = df_new.join(df_old, "team_id", "leftanti")
         df_final = df_new.union(df_old).orderBy("_source_load_datetime", "team_id")
-    except pyspark.errors.AnalysisException:
+    except:
         df_final = df_new.orderBy("_source_load_datetime", "team_id")
 
-    df_final.write \
-        .format("jdbc") \
-        .option("url", jdbc_url) \
-        .option("dbtable", "dwh_detailed.hub_teams") \
-        .option("properties", properties) \
-        .mode("overwrite") \
-        .save()
+    write_table_to_pg(df_final, "overwrite", "dwh_detailed.hub_teams")
 
 
 task_get_teams_to_source = PythonOperator(
