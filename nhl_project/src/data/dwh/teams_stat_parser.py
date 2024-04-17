@@ -93,7 +93,7 @@ def get_teams_stat_to_source(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -155,7 +155,7 @@ def get_teama_stat_to_staging(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -174,7 +174,7 @@ def get_teama_stat_to_operational(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -283,7 +283,7 @@ def sat_teams_core(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -446,7 +446,7 @@ def tl_teams_stat(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -481,7 +481,7 @@ def pit_teams(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
@@ -537,7 +537,7 @@ def dm_teams(**kwargs):
     spark = (
         SparkSession.builder.config(
             "spark.jars",
-            "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+            "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
         )
         .master("local[*]")
         .appName("parse_teams")
