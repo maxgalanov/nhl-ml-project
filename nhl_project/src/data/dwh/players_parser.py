@@ -649,3 +649,51 @@ def dm_players(**kwargs):
     )
 
     write_table_to_pg(df_dm, spark, "overwrite", "dwh_common.dm_players")
+
+
+task_get_players_to_source = PythonOperator(
+    task_id="get_players_to_source",
+    python_callable=get_players_to_source,
+    dag=dag,
+)
+
+task_get_players_to_staging = PythonOperator(
+    task_id="get_players_to_staging",
+    python_callable=get_players_to_staging,
+    dag=dag,
+)
+
+task_get_players_to_operational = PythonOperator(
+    task_id="get_players_to_operational",
+    python_callable=get_players_to_operational,
+    dag=dag,
+)
+
+task_hub_players = PythonOperator(
+    task_id="hub_players",
+    python_callable=hub_players,
+    dag=dag,
+)
+
+task_sat_players = PythonOperator(
+    task_id="sat_players",
+    python_callable=sat_players,
+    dag=dag,
+)
+
+task_pit_players = PythonOperator(
+    task_id="pit_players",
+    python_callable=pit_players,
+    dag=dag,
+)
+
+task_dm_players = PythonOperator(
+    task_id="dm_players",
+    python_callable=dm_players,
+    dag=dag,
+)
+
+task_get_players_to_source >> task_get_players_to_staging >> task_get_players_to_operational
+task_get_players_to_operational >> [task_hub_players, task_sat_players]
+task_sat_players >> task_pit_players >> task_dm_players
+task_hub_players >> task_dm_players

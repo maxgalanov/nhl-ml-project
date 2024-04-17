@@ -1,13 +1,11 @@
 import pandas as pd
 import requests
-import os
 from datetime import timedelta, datetime
 
 from airflow.models import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
@@ -32,12 +30,6 @@ dag = DAG(
     description="ETL process for getting list of NHL teams",
 )
 
-SOURCE_PATH = "/nhl_project/data/dwh/source/"
-STAGING_PATH = "/nhl_project/data/dwh/vault/staging/"
-OPERATIONAL_PATH = "/nhl_project/data/dwh/vault/operational/"
-DETAILED_PATH = "/nhl_project/data/dwh/vault/detailed/"
-COMMON_PATH = "/nhl_project/data/dwh/vault/common/"
-
 
 def get_information(endpoint, base_url="https://api-web.nhle.com"):
     base_url = f"{base_url}"
@@ -53,6 +45,45 @@ def get_information(endpoint, base_url="https://api-web.nhle.com"):
         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
 
 
+def read_table_from_pg(spark, table_name):
+    password = Variable.get("HSE_DB_PASSWORD")
+
+    df_table = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+        .option("driver", "org.postgresql.Driver") \
+        .option("dbtable", table_name) \
+        .option("user", "maxglnv") \
+        .option("password", password) \
+        .load()
+
+    return df_table
+
+
+def write_table_to_pg(df, spark, write_mode, table_name):
+    password = Variable.get("HSE_DB_PASSWORD")
+    df.cache() 
+    print("Initial count:", df.count())
+    print("SparkContext active:", spark.sparkContext._jsc.sc().isStopped())
+
+    try:
+        df.write \
+            .mode(write_mode) \
+            .format("jdbc") \
+            .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+            .option("driver", "org.postgresql.Driver") \
+            .option("dbtable", table_name) \
+            .option("user", "maxglnv") \
+            .option("password", password) \
+            .save()
+        print("Data written to PostgreSQL successfully")
+    except Exception as e:
+        print("Error during saving data to PostgreSQL:", e)
+
+    print("Count after write:", df.count())
+    df.unpersist()
+
+
 def get_players_games_stat_to_source(**kwargs):
     current_date = kwargs["ds"]
 
@@ -62,9 +93,7 @@ def get_players_games_stat_to_source(**kwargs):
         .getOrCreate()
     )
 
-    df_players = spark.read.parquet(DETAILED_PATH + f"hub_players").select(
-        "player_source_id"
-    )
+    df_players = read_table_from_pg(spark, "dwh_detailed.hub_players").select("player_source_id")
     players_lst = df_players.distinct().rdd.map(lambda x: x[0]).collect()
 
     df_games = pd.DataFrame()
@@ -95,22 +124,26 @@ def get_players_games_stat_to_source(**kwargs):
         .withColumn("_source", F.lit("API_NHL"))
     )
 
-    df_games_info.repartition(1).write.mode("overwrite").parquet(
-        SOURCE_PATH + f"players_games_stat/{current_date}"
-    )
+    table_name = f"dwh_source.players_games_stat_{current_date.replace('-', '_')}"
+    write_table_to_pg(df_games_info, spark, "overwrite", table_name)
+
+    data = [("dwh_source.players_games_stat", dt)]
+    df_meta = spark.createDataFrame(data, schema=["table_name", "updated_at"])
+    df_meta.show()
+
+    write_table_to_pg(df_meta, spark, "append", "dwh_source.metadata_table")
 
 
-def get_penultimate_file_name(directory):
-    files = os.listdir(directory)
-    files = [f for f in files if os.path.isdir(os.path.join(directory, f))]
+def get_penultimate_table_name(spark, table_name):
 
-    if len(files) < 2:
+    df_meta = read_table_from_pg(spark, "dwh_source.metadata_table")
+    
+    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(F.col("updated_at").desc())
+    if sorted_df_meta.count() < 2:
         return None
-
-    files.sort(key=lambda x: os.path.getmtime(os.path.join(directory, x)), reverse=True)
-    penultimate_file = files[1]
-
-    return penultimate_file
+    else:
+        second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
+        return second_to_last_date
 
 
 def get_players_games_stat_to_staging(**kwargs):
@@ -122,15 +155,13 @@ def get_players_games_stat_to_staging(**kwargs):
         .getOrCreate()
     )
 
-    df_new = spark.read.parquet(SOURCE_PATH + f"players_games_stat/{current_date}")
+    df_new = read_table_from_pg(spark, f"dwh_source.players_games_stat_{current_date.replace('-', '_')}")
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
-    prev_file_name = get_penultimate_file_name(SOURCE_PATH + "players_games_stat")
+    prev_table_name = get_penultimate_table_name(spark, "dwh_source.players_games_stat")
 
-    if prev_file_name:
-        df_prev = spark.read.parquet(
-            SOURCE_PATH + f"players_games_stat/{prev_file_name}"
-        )
+    if prev_table_name:
+        df_prev = read_table_from_pg(spark, f"dwh_source.players_games_stat_{prev_table_name[:10].replace('-', '_')}")
         df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
 
         df_deleted = df_prev.join(
@@ -214,9 +245,7 @@ def get_players_games_stat_to_staging(**kwargs):
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
-    df_final.repartition(1).write.mode("overwrite").parquet(
-        STAGING_PATH + f"players_games_stat/{current_date}"
-    )
+    write_table_to_pg(df_final, spark, "overwrite", "dwh_staging.players_games_stat")
 
 
 def get_players_games_stat_to_operational(**kwargs):
@@ -228,8 +257,8 @@ def get_players_games_stat_to_operational(**kwargs):
         .getOrCreate()
     )
 
-    df = spark.read.parquet(STAGING_PATH + f"players_games_stat/{current_date}")
-    hub_teams = spark.read.parquet(DETAILED_PATH + f"hub_teams")
+    df = read_table_from_pg(spark, "dwh_staging.players_games_stat")
+    hub_teams = read_table_from_pg(spark, "dwh_detailed.hub_teams")
 
     df = (
         df.select(
@@ -304,9 +333,7 @@ def get_players_games_stat_to_operational(**kwargs):
         .select(df["*"], F.col("df4.team_id").alias("opponent_team_id"))
     )
 
-    df.repartition(1).write.mode("append").parquet(
-        OPERATIONAL_PATH + f"players_games_stat"
-    )
+    write_table_to_pg(df, spark, "append", "dwh_operational.players_games_stat")
 
 
 def tl_players_games_stat(**kwargs):
@@ -316,7 +343,7 @@ def tl_players_games_stat(**kwargs):
         .getOrCreate()
     )
 
-    df = spark.read.parquet(OPERATIONAL_PATH + f"players_games_stat")
+    df = read_table_from_pg(spark, "dwh_operational.players_games_stat")
 
     window_spec = Window.partitionBy(
         "game_id", "player_id", "team_id", "opponent_team_id"
@@ -332,9 +359,7 @@ def tl_players_games_stat(**kwargs):
         ["game_id", "player_id", "team_id", "opponent_team_id"]
     ).orderBy("game_date", "game_id")
 
-    result_df.repartition(1).write.mode("overwrite").parquet(
-        DETAILED_PATH + f"tl_players_games_stat"
-    )
+    write_table_to_pg(result_df, spark, "overwrite", "dwh_detailed.tl_players_games_stat")
 
 
 task_get_players_games_stat_to_source = PythonOperator(
