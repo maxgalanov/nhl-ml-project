@@ -123,7 +123,7 @@ def get_teams_to_source(**kwargs):
     table_name = f"dwh_source.teams_{current_date.replace('-', '_')}"
     logger.info(table_name)
 
-    write_table_to_pg(df_teams, "overwrite", table_name)
+    write_table_to_pg(df_teams, spark, "overwrite", table_name)
     logger.info("Запись данных в базу данных успешно завершена")
 
     logger.info("Начинаю запись метаданных")
