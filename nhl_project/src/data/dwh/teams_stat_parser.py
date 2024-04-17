@@ -508,27 +508,33 @@ def pit_teams(**kwargs):
         date_grid.team_id,
         date_grid.effective_from,
         date_grid.effective_to,
-        F.when(date_grid.effective_to == "2040-01-01 00:00:00", True) \
-            .otherwise(False) \
-            .alias("is_active"),
-        F.col("_version").alias("sat_teams_name_version"),
+        F.when(date_grid.effective_to == "2040-01-01 00:00:00", True)
+        .otherwise(False)
+        .alias("is_active"),
+        F.col("_version").alias("sat_teams_core_version"),
     )
 
-    fill = Window.partitionBy("team_id") \
-        .orderBy("effective_from") \
+    fill = (
+        Window.partitionBy("team_id")
+        .orderBy("effective_from")
         .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    )
 
-    result = data_versions.withColumn(
-            "sat_teams_name_version",
-            F.last("sat_teams_name_version", ignorenulls=True).over(fill),
-        ).withColumn("is_active", F.when(F.col("is_active"), "True").otherwise("False")) \
+    result = (
+        data_versions.withColumn(
+            "sat_teams_core_version",
+            F.last("sat_teams_core_version", ignorenulls=True).over(fill),
+        )
+        .withColumn("is_active", F.when(F.col("is_active"), "True").otherwise("False"))
         .select(
             "team_id",
             "effective_from",
             "effective_to",
-            "sat_teams_name_version",
+            "sat_teams_core_version",
             "is_active",
-        ).orderBy("team_id", "effective_from")
+        )
+        .orderBy("team_id", "effective_from")
+    )
 
     write_table_to_pg(result, spark, "overwrite", "dwh_common.pit_teams")
 
