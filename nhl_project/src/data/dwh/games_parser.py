@@ -481,7 +481,7 @@ def tl_teams_games(**kwargs):
 
     window_spec = Window.partitionBy(
         "game_id", "home_team_id", "visiting_team_id"
-    ).orderBy(F.F.col("_source_load_datetime").desc())
+    ).orderBy(F.col("_source_load_datetime").desc())
 
     result_df = (
         df.select(
