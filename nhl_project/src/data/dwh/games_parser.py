@@ -491,7 +491,7 @@ def tl_teams_games(**kwargs):
             "visiting_team_id",
             "_source_load_datetime",
         )
-        .withF.Column("rank", F.row_number().over(window_spec))
+        .withColumn("rank", F.row_number().over(window_spec))
         .filter("rank = 1")
         .drop("rank")
     )
