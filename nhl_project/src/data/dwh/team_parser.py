@@ -1,6 +1,5 @@
 import pandas as pd
 import requests
-import os
 from datetime import timedelta, datetime
 
 import logging
@@ -11,7 +10,6 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
@@ -140,9 +138,11 @@ def get_penultimate_table_name(spark, table_name):
     df_meta = read_table_from_pg(spark, "dwh_source.metadata_table")
     
     sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(F.col("updated_at").desc())
-    second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
-
-    return second_to_last_date
+    if sorted_df_meta.count() < 2:
+        return None
+    else:
+        second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
+        return second_to_last_date
 
 
 def get_teams_to_staging(**kwargs):

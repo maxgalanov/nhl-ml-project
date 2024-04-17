@@ -1,6 +1,5 @@
 import pandas as pd
 import requests
-import os
 from datetime import timedelta, datetime
 
 from airflow.models import DAG
@@ -8,7 +7,6 @@ from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
