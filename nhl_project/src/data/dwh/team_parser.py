@@ -2,17 +2,16 @@ import pandas as pd
 import requests
 from datetime import timedelta, datetime
 
-import logging
-
 from airflow.models import DAG
 from airflow.models import Variable
-from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
+
+from src.data.functions import get_information, read_table_from_pg, write_table_to_pg
 
 
 DEFAULT_ARGS = {
@@ -35,64 +34,60 @@ dag = DAG(
 )
 
 
-def get_information(endpoint, base_url="https://api-web.nhle.com"):
-    base_url = f"{base_url}"
-    endpoint = f"{endpoint}"
-    full_url = f"{base_url}{endpoint}"
+# def get_information(endpoint, base_url="https://api-web.nhle.com"):
+#     base_url = f"{base_url}"
+#     endpoint = f"{endpoint}"
+#     full_url = f"{base_url}{endpoint}"
 
-    response = requests.get(full_url)
+#     response = requests.get(full_url)
 
-    if response.status_code == 200:
-        player_data = response.json()
-        return player_data
-    else:
-        print(f"Error: Unable to fetch data. Status code: {response.status_code}")
-
-
-def read_table_from_pg(spark, table_name):
-    password = Variable.get("HSE_DB_PASSWORD")
-
-    df_table = spark.read \
-        .format("jdbc") \
-        .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
-        .option("driver", "org.postgresql.Driver") \
-        .option("dbtable", table_name) \
-        .option("user", "maxglnv") \
-        .option("password", password) \
-        .load()
-
-    return df_table
+#     if response.status_code == 200:
+#         player_data = response.json()
+#         return player_data
+#     else:
+#         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
 
 
-def write_table_to_pg(df, spark, write_mode, table_name):
-    password = Variable.get("HSE_DB_PASSWORD")
-    df.cache() 
-    print("Initial count:", df.count())
-    print("SparkContext active:", spark.sparkContext._jsc.sc().isStopped())
+# def read_table_from_pg(spark, table_name):
+#     password = Variable.get("HSE_DB_PASSWORD")
 
-    try:
-        df.write \
-            .mode(write_mode) \
-            .format("jdbc") \
-            .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
-            .option("driver", "org.postgresql.Driver") \
-            .option("dbtable", table_name) \
-            .option("user", "maxglnv") \
-            .option("password", password) \
-            .save()
-        print("Data written to PostgreSQL successfully")
-    except Exception as e:
-        print("Error during saving data to PostgreSQL:", e)
+#     df_table = spark.read \
+#         .format("jdbc") \
+#         .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+#         .option("driver", "org.postgresql.Driver") \
+#         .option("dbtable", table_name) \
+#         .option("user", "maxglnv") \
+#         .option("password", password) \
+#         .load()
 
-    print("Count after write:", df.count())
-    df.unpersist()
+#     return df_table
+
+
+# def write_table_to_pg(df, spark, write_mode, table_name):
+#     password = Variable.get("HSE_DB_PASSWORD")
+#     df.cache() 
+#     print("Initial count:", df.count())
+#     print("SparkContext active:", spark.sparkContext._jsc.sc().isStopped())
+
+#     try:
+#         df.write \
+#             .mode(write_mode) \
+#             .format("jdbc") \
+#             .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
+#             .option("driver", "org.postgresql.Driver") \
+#             .option("dbtable", table_name) \
+#             .option("user", "maxglnv") \
+#             .option("password", password) \
+#             .save()
+#         print("Data written to PostgreSQL successfully")
+#     except Exception as e:
+#         print("Error during saving data to PostgreSQL:", e)
+
+#     print("Count after write:", df.count())
+#     df.unpersist()
 
 
 def get_teams_to_source(**kwargs):
-
-    logger = logging.getLogger("airflow.task")
-    logger.info("Запуск задачи получения данных о командах")
-
     current_date = kwargs["ds"]
 
     spark = (
@@ -115,22 +110,12 @@ def get_teams_to_source(**kwargs):
         .withColumn("_source", F.lit("API_NHL"))
     )
 
-    logger.info("Начинаю запись данных")
-
-
     table_name = f"dwh_source.teams_{current_date.replace('-', '_')}"
-    logger.info(table_name)
-
     write_table_to_pg(df_teams, spark, "overwrite", table_name)
-    logger.info("Запись данных в базу данных успешно завершена")
-
-    logger.info("Начинаю запись метаданных")
 
     data = [("dwh_source.teams", dt)]
     df_meta = spark.createDataFrame(data, schema=["table_name", "updated_at"])
-
     write_table_to_pg(df_meta, spark, "append", "dwh_source.metadata_table")
-    logger.info("Запись метаданных успешно завершена")
 
 
 def get_penultimate_table_name(spark, table_name):
