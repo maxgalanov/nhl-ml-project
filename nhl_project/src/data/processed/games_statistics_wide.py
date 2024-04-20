@@ -4,37 +4,41 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 
-
-SOURCE_PATH = '/nhl_project/data/dwh/source/'
-STAGING_PATH = "/nhl_project/data/dwh/vault/staging/"
-OPERATIONAL_PATH = "/nhl_project/data/dwh/vault/operational/"
-DETAILED_PATH = "/nhl_project/data/dwh/vault/detailed/"
-COMMON_PATH = "/nhl_project/data/dwh/vault/common/"
-PROCESSED_PATH = "/nhl_project/data/processed/"
-REPORTING_PATH = "/Users/shiryaevva/HSE/2-nd_year/nhl-ml-project/nhl_project/data/dwh/vault/reporting/"
+from functions import read_table_from_pg, write_df_to_pg
 
 
-spark = SparkSession.builder.master("local[*]").appName("parse_teams").getOrCreate()
+spark = (
+    SparkSession.builder.config(
+        "spark.jars",
+        "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+    )
+    .master("local[*]")
+    .appName("parse_teams")
+    .getOrCreate()
+)
 
 
-dm_games = spark.read.parquet(COMMON_PATH + f"dm_games")
-tl_teams_stat = spark.read.parquet(DETAILED_PATH + f"tl_teams_stat")
-tl_teams_games = spark.read.parquet(DETAILED_PATH + f"tl_teams_games")
-hub_teams = spark.read.parquet(DETAILED_PATH + f"hub_teams")
-sat_teams_core = spark.read.parquet(DETAILED_PATH + f"sat_teams_core")
+dm_games = read_table_from_pg(spark, "dwh_common.dm_games")
+tl_teams_stat = read_table_from_pg(spark,"dwh_detailed.tl_teams_stat")
+tl_teams_games = read_table_from_pg(spark, "dwh_detailed.tl_teams_games")
+hub_teams = read_table_from_pg(spark, "dwh_detailed.hub_teams")
+sat_teams_core = read_table_from_pg(spark, "dwh_detailed.sat_teams_core")
 
 
-games = dm_games.filter(F.col("is_active") == "True") \
-    .join(tl_teams_games, "game_id", "inner") \
+games = (
+    dm_games.filter(F.col("is_active") == "True")
+    .join(tl_teams_games, "game_id", "inner")
     .join(
         hub_teams.alias("df1"),
         F.col("df1.team_id") == tl_teams_games["home_team_id"],
         "inner",
-    ).join(
+    )
+    .join(
         hub_teams.alias("df2"),
         F.col("df2.team_id") == tl_teams_games["visiting_team_id"],
         "inner",
-    ).select(
+    )
+    .select(
         "game_source_id",
         dm_games["game_date"],
         "season",
@@ -45,6 +49,7 @@ games = dm_games.filter(F.col("is_active") == "True") \
         "visiting_score",
         (F.col("home_score") - F.col("visiting_score")).alias("score_delta"),
     )
+)
 
 teams_stat = tl_teams_stat.join(
     sat_teams_core.filter(F.col("is_active") == "True"),
@@ -92,7 +97,7 @@ result_df = joined_df.select(
             "h__batch_id",
             "h_team_id",
             "h_team_source_id",
-            "h_team_business_id"
+            "h_team_business_id",
         ]
     ],
     *[
@@ -108,19 +113,21 @@ result_df = joined_df.select(
             "v__batch_id",
             "v_team_id",
             "v_team_source_id",
-            "v_team_business_id"
+            "v_team_business_id",
         ]
     ]
 )
 
-
-current_date = datetime.now().strftime('%Y-%m-%d')
+current_date = datetime.now().strftime("%Y-%m-%d")
 
 df_games = result_df.toPandas()
-df_games = df_games[(df_games.game_date < current_date) & (df_games.game_type == 2)].sort_values(by="game_date")
-df_games["home_team_winner"] = df_games['score_delta'].apply(lambda x: 0 if x < 0 else 1)
-df_games['game_date'] = pd.to_datetime(df_games['game_date'])
-df_games['game_month'] = df_games['game_date'].dt.month
+df_games = df_games[
+    (df_games.game_date < current_date) & (df_games.game_type == 2)
+].sort_values(by="game_date")
+df_games["home_team_winner"] = df_games["score_delta"].apply(
+    lambda x: 0 if x < 0 else 1
+)
+df_games["game_date"] = pd.to_datetime(df_games["game_date"])
+df_games["game_month"] = df_games["game_date"].dt.month
 
-df_games.to_csv(PROCESSED_PATH + 'games_statistics_wide.csv')
-teams_stat.toPandas().to_csv(REPORTING_PATH + 'teams_statistics.csv', index=False)
+write_df_to_pg(df_games, "games_wide_datamart")
