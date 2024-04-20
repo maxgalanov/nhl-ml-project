@@ -79,7 +79,7 @@ def read_table_from_pg(
             .option("password", password) \
             .load()
         
-        print("Данные успешно загружены из базы данных в Spark DataFrame.")
+        print(f"Данные успешно загружены из таблицы {table_name} PostgreSQL в Spark DataFrame.")
 
         return df_table
     
@@ -124,9 +124,9 @@ def write_table_to_pg(
                 .option("user", username) \
                 .option("password", password) \
                 .save()
-            print("Spark DataFrame успешно записан в базу данных.")
+            print(f"Spark DataFrame успешно записан в PostgreSQL в таблицу {table_name}.")
         except Exception as e:
-            print(f"Произошла ошибка при записи в базу данных: {e}")
+            print(f"Произошла ошибка при записи таблицы {table_name} в базу данных: {e}")
 
         print("Количество строк:", df.count())
         df.unpersist()
@@ -166,9 +166,9 @@ def write_df_to_pg(
 
         try:
             df.to_sql(table_name, engine, schema=schema, index=False, if_exists="replace")
-            print("DataFrame успешно записан в базу данных.")
+            print(f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}.")
         except Exception as e:
-            print(f"Произошла ошибка при записи в базу данных: {e}")
+            print(f"Произошла ошибка при записи таблицы {schema}.{table_name} в базу данных: {e}")
 
 
 def read_df_from_pg(
@@ -203,8 +203,8 @@ def read_df_from_pg(
             sql_query = f"SELECT * FROM {schema}.{table_name}"
             
             df = pd.read_sql_query(sql_query, con=engine)
-            print("Данные успешно загружены из базы данных.")
+            print(f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame.")
             return df
         except Exception as e:
-            print(f"Произошла ошибка при чтении из базы данных: {e}")
+            print(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}")
             return None

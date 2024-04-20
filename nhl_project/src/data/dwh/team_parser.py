@@ -32,59 +32,6 @@ dag = DAG(
 )
 
 
-# def get_information(endpoint, base_url="https://api-web.nhle.com"):
-#     base_url = f"{base_url}"
-#     endpoint = f"{endpoint}"
-#     full_url = f"{base_url}{endpoint}"
-
-#     response = requests.get(full_url)
-
-#     if response.status_code == 200:
-#         player_data = response.json()
-#         return player_data
-#     else:
-#         print(f"Error: Unable to fetch data. Status code: {response.status_code}")
-
-
-# def read_table_from_pg(spark, table_name):
-#     password = Variable.get("HSE_DB_PASSWORD")
-
-#     df_table = spark.read \
-#         .format("jdbc") \
-#         .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
-#         .option("driver", "org.postgresql.Driver") \
-#         .option("dbtable", table_name) \
-#         .option("user", "maxglnv") \
-#         .option("password", password) \
-#         .load()
-
-#     return df_table
-
-
-# def write_table_to_pg(df, spark, write_mode, table_name):
-#     password = Variable.get("HSE_DB_PASSWORD")
-#     df.cache() 
-#     print("Initial count:", df.count())
-#     print("SparkContext active:", spark.sparkContext._jsc.sc().isStopped())
-
-#     try:
-#         df.write \
-#             .mode(write_mode) \
-#             .format("jdbc") \
-#             .option("url", "jdbc:postgresql://rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net:6432/hse_db") \
-#             .option("driver", "org.postgresql.Driver") \
-#             .option("dbtable", table_name) \
-#             .option("user", "maxglnv") \
-#             .option("password", password) \
-#             .save()
-#         print("Data written to PostgreSQL successfully")
-#     except Exception as e:
-#         print("Error during saving data to PostgreSQL:", e)
-
-#     print("Count after write:", df.count())
-#     df.unpersist()
-
-
 def get_teams_to_source(**kwargs):
     current_date = kwargs["ds"]
 
