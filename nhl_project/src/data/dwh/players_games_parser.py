@@ -197,7 +197,6 @@ def get_players_games_stat_to_staging(**kwargs):
 
 
 def get_players_games_stat_to_operational(**kwargs):
-    current_date = kwargs["ds"]
 
     spark = (
         SparkSession.builder.master("local[*]")
@@ -285,13 +284,20 @@ def get_players_games_stat_to_operational(**kwargs):
 
 
 def tl_players_games_stat(**kwargs):
+    current_date = kwargs["ds"]
+
     spark = (
         SparkSession.builder.master("local[*]")
         .appName("parse_players_games_stat")
         .getOrCreate()
     )
 
-    df = read_table_from_pg(spark, "dwh_operational.players_games_stat")
+    tl_players_games_stat = read_table_from_pg(spark, "dwh_detailed.tl_players_games_stat")
+    df = read_table_from_pg(spark, "dwh_operational.players_games_stat").filter(
+        F.col("_batch_id") == F.lit(current_date)
+    )
+
+    df = tl_players_games_stat.unionByName(df)
 
     window_spec = Window.partitionBy(
         "game_id", "player_id", "team_id", "opponent_team_id"
