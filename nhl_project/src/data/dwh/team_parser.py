@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
-from src.data.functions import get_information, read_table_from_pg, write_table_to_pg
+from nhl_project.src.data.functions import get_information, read_table_from_pg, write_table_to_pg
 
 
 DEFAULT_ARGS = {
