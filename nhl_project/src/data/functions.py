@@ -78,6 +78,8 @@ def read_table_from_pg(
             .option("user", username) \
             .option("password", password) \
             .load()
+        
+        print("Данные успешно загружены из базы данных в Spark DataFrame.")
 
         return df_table
     
@@ -108,11 +110,9 @@ def write_table_to_pg(
     database (str): Имя базы данных.
     """
     with get_time():
-        password = Variable.get("HSE_DB_PASSWORD")
         db_url = f"jdbc:postgresql://{host}:{port}/{database}"
         df.cache() 
-        print("Initial count:", df.count())
-        print("SparkContext active:", spark.sparkContext._jsc.sc().isStopped())
+        print("Количество строк:", df.count())
 
         try:
             df.write \
@@ -124,11 +124,11 @@ def write_table_to_pg(
                 .option("user", username) \
                 .option("password", password) \
                 .save()
-            print("Data written to PostgreSQL successfully")
+            print("Spark DataFrame успешно записан в базу данных.")
         except Exception as e:
-            print("Error during saving data to PostgreSQL:", e)
+            print(f"Произошла ошибка при записи в базу данных: {e}")
 
-        print("Count after write:", df.count())
+        print("Количество строк:", df.count())
         df.unpersist()
 
 

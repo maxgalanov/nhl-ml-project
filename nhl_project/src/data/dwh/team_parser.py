@@ -1,9 +1,7 @@
 import pandas as pd
-import requests
 from datetime import timedelta, datetime
 
 from airflow.models import DAG
-from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
