@@ -187,7 +187,7 @@ def get_players_games_stat_to_staging(**kwargs):
             df_new["*"]
         )
 
-        df_final = df_changed.union(df_deleted).withColumn(
+        df_final = df_changed.unionByName(df_deleted).withColumn(
             "_batch_id", F.lit(current_date)
         )
     else:

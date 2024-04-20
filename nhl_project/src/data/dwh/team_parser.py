@@ -104,7 +104,7 @@ def get_teams_to_staging(**kwargs):
         )
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
-        df_final = df_changed.union(df_deleted).withColumn("_batch_id", F.lit(current_date))
+        df_final = df_changed.unionByName(df_deleted).withColumn("_batch_id", F.lit(current_date))
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
@@ -176,7 +176,7 @@ def hub_teams(**kwargs):
         df_old = read_table_from_pg(spark, "dwh_detailed.hub_teams")
 
         df_new = df_new.join(df_old, "team_id", "leftanti")
-        df_final = df_new.union(df_old).orderBy("_source_load_datetime", "team_id")
+        df_final = df_new.unionByName(df_old).orderBy("_source_load_datetime", "team_id")
     except:
         df_final = df_new.orderBy("_source_load_datetime", "team_id")
 

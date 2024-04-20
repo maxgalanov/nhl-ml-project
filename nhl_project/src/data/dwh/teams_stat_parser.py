@@ -292,7 +292,7 @@ def sat_teams_core(**kwargs):
                 F.col("_source"),
                 F.col("_data_hash"),
             )
-            .union(increment)
+            .unionByName(increment)
         )
     except:
         active = increment
@@ -380,7 +380,7 @@ def sat_teams_core(**kwargs):
         )
 
     try:
-        union = state.union(scd2).orderBy("team_id", "effective_from")
+        union = state.unionByName(scd2).orderBy("team_id", "effective_from")
     except:
         union = scd2.orderBy("team_id", "effective_from")
 

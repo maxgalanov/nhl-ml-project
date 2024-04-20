@@ -175,7 +175,7 @@ def get_players_to_staging(**kwargs):
         )
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
-        df_final = df_changed.union(df_deleted) \
+        df_final = df_changed.unionByName(df_deleted) \
             .withColumn("_batch_id", F.lit(current_date))
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
@@ -267,7 +267,7 @@ def hub_players(**kwargs):
 
         df_new = df_new.join(df_old, "player_id", "leftanti")
         df_final = (
-            df_new.union(df_old)
+            df_new.unionByName(df_old)
             .orderBy("_source_load_datetime", "player_id")
             .distinct()
         )
@@ -368,7 +368,7 @@ def sat_players(**kwargs):
                 F.col("_source"),
                 F.col("_data_hash"),
             )
-            .union(increment)
+            .unionByName(increment)
         )
     except:
         active = increment
@@ -477,7 +477,7 @@ def sat_players(**kwargs):
         )
 
     try:
-        union = state.union(scd2).orderBy("player_id", "effective_from")
+        union = state.unionByName(scd2).orderBy("player_id", "effective_from")
     except:
         union = scd2.orderBy("player_id", "effective_from")
 

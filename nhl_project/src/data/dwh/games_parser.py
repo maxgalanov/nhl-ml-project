@@ -139,7 +139,7 @@ def get_games_to_staging(**kwargs):
         )
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
-        df_final = df_changed.union(df_deleted).withColumn("_batch_id", F.lit(current_date))
+        df_final = df_changed.unionByName(df_deleted).withColumn("_batch_id", F.lit(current_date))
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
@@ -236,7 +236,7 @@ def hub_games(**kwargs):
         df_old = read_table_from_pg(spark, f"dwh_detailed.hub_games")
 
         df_new = df_new.join(df_old, "game_id", "leftanti")
-        df_final = df_new.union(df_old).orderBy("_source_load_datetime", "game_id")
+        df_final = df_new.unionByName(df_old).orderBy("_source_load_datetime", "game_id")
     except:
         df_final = df_new.orderBy("_source_load_datetime", "game_id")
 
@@ -313,7 +313,7 @@ def sat_games(**kwargs):
                 F.col("_source"),
                 F.col("_data_hash"),
             )
-            .union(increment)
+            .unionByName(increment)
         )
     except:
         active = increment
@@ -406,7 +406,7 @@ def sat_games(**kwargs):
     )
 
     try:
-        union = state.union(scd2).orderBy("game_id", "effective_from")
+        union = state.unionByName(scd2).orderBy("game_id", "effective_from")
     except:
         union = scd2.orderBy("game_id", "effective_from")
 
