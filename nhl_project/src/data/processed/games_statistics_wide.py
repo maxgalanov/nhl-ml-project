@@ -4,26 +4,24 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 
-from functions import read_table_from_pg, write_df_to_pg
+from nhl_project.src.data.functions import read_table_from_pg, write_df_to_pg
 
 
 spark = (
     SparkSession.builder.config(
         "spark.jars",
-        "/System/Volumes/Data/Users/shiryaevva/Library/Python/3.9/lib/python/site-packages/pyspark/jars/postgresql-42.3.1.jar",
+        "~/airflow_venv/lib/python3.10/site-packages/pyspark/jars/postgresql-42.3.1.jar",
     )
     .master("local[*]")
     .appName("parse_teams")
     .getOrCreate()
 )
 
-
 dm_games = read_table_from_pg(spark, "dwh_common.dm_games")
 tl_teams_stat = read_table_from_pg(spark,"dwh_detailed.tl_teams_stat")
 tl_teams_games = read_table_from_pg(spark, "dwh_detailed.tl_teams_games")
 hub_teams = read_table_from_pg(spark, "dwh_detailed.hub_teams")
 sat_teams_core = read_table_from_pg(spark, "dwh_detailed.sat_teams_core")
-
 
 games = (
     dm_games.filter(F.col("is_active") == "True")
@@ -131,3 +129,4 @@ df_games["game_date"] = pd.to_datetime(df_games["game_date"])
 df_games["game_month"] = df_games["game_date"].dt.month
 
 write_df_to_pg(df_games, "games_wide_datamart")
+write_df_to_pg(teams_stat, "teams_stat_wide_datamart")
