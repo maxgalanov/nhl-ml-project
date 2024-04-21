@@ -23,12 +23,12 @@ DEFAULT_ARGS = {
 
 dag = DAG(
     dag_id="nhl_games",
-    schedule_interval="0 18 * * *",
+    schedule_interval="15 18 * * *",
     start_date=days_ago(2),
     catchup=False,
     tags=["hse_nhl_ml_project"],
     default_args=DEFAULT_ARGS,
-    description="ETL process for getting list of NHL teams",
+    description="ETL process for getting list of NHL games",
 )
 
 
