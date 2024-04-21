@@ -69,19 +69,21 @@ def read_table_from_pg(
     """
     with get_time():
         db_url = f"jdbc:postgresql://{host}:{port}/{database}"
-
-        df_table = spark.read \
-            .format("jdbc") \
-            .option("url", db_url) \
-            .option("driver", "org.postgresql.Driver") \
-            .option("dbtable", table_name) \
-            .option("user", username) \
-            .option("password", password) \
-            .load()
+        try:
+            df_table = spark.read \
+                .format("jdbc") \
+                .option("url", db_url) \
+                .option("driver", "org.postgresql.Driver") \
+                .option("dbtable", table_name) \
+                .option("user", username) \
+                .option("password", password) \
+                .load()
+            
+            print(f"Данные успешно загружены из таблицы {table_name} PostgreSQL в Spark DataFrame.")
+            return df_table
         
-        print(f"Данные успешно загружены из таблицы {table_name} PostgreSQL в Spark DataFrame.")
-
-        return df_table
+        except Exception as e:
+            raise Exception(f"Произошла ошибка при чтении таблицы {table_name} из базы данных: {e}") from e
     
 
 def write_table_to_pg(
@@ -126,7 +128,7 @@ def write_table_to_pg(
                 .save()
             print(f"Spark DataFrame успешно записан в PostgreSQL в таблицу {table_name}.")
         except Exception as e:
-            print(f"Произошла ошибка при записи таблицы {table_name} в базу данных: {e}")
+            raise Exception(f"Произошла ошибка при записи таблицы {table_name} в базу данных: {e}") from e
 
         print("Количество строк:", df.count())
         df.unpersist()
@@ -168,7 +170,7 @@ def write_df_to_pg(
             df.to_sql(table_name, engine, schema=schema, index=False, if_exists="replace")
             print(f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}.")
         except Exception as e:
-            print(f"Произошла ошибка при записи таблицы {schema}.{table_name} в базу данных: {e}")
+            raise Exception(f"Произошла ошибка при записи таблицы {schema}.{table_name} в базу данных: {e}") from e
 
 
 def read_df_from_pg(
@@ -206,5 +208,4 @@ def read_df_from_pg(
             print(f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame.")
             return df
         except Exception as e:
-            print(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}")
-            return None
+            raise Exception(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}") from e
