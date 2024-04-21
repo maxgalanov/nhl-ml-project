@@ -8,7 +8,7 @@ from airflow.utils.dates import days_ago
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 
-from nhl_project.src.data.functions import read_table_from_pg, write_df_to_pg
+from nhl_project.src.data.functions import read_table_from_pg, write_table_to_pg
 
 
 DEFAULT_ARGS = {
@@ -142,21 +142,17 @@ def create_datamart(**kwargs):
     )
 
     current_date = datetime.now().strftime("%Y-%m-%d")
-
-    df_games = result_df.toPandas()
-    teams_stat = teams_stat.toPandas()
     
-    df_games = df_games[
-        (df_games.game_date < current_date)
-    ].sort_values(by="game_date")
-    df_games["home_team_winner"] = df_games["score_delta"].apply(
-        lambda x: 0 if x < 0 else 1
+    df_games = (
+        result_df.filter(F.col("game_date") < F.lit(current_date))
+        .orderBy("game_date")
+        .withColumn("home_team_winner", F.when(F.col("score_delta") < 0, 0).otherwise(1))
+        .withColumn("game_date", F.to_date(F.col("game_date")))
+        .withColumn("game_month", F.month(F.col("game_date")))
     )
-    df_games["game_date"] = pd.to_datetime(df_games["game_date"])
-    df_games["game_month"] = df_games["game_date"].dt.month
 
-    write_df_to_pg(df_games, "games_wide_datamart")
-    write_df_to_pg(teams_stat, "teams_stat_wide_datamart")
+    write_table_to_pg(df_games, spark, "overwrite", "public.games_wide_datamart")
+    write_table_to_pg(teams_stat, spark, "overwrite", "public.teams_stat_wide_datamart")
 
 
 task_create_datamart = PythonOperator(
