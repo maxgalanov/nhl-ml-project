@@ -176,7 +176,7 @@ def write_df_to_pg(
         with engine.connect() as connection:
             try:
                 df.to_sql(
-                    table_name, engine, schema=schema, index=False, if_exists="replace"
+                    table_name, con=connection, schema=schema, index=False, if_exists="replace"
                 )
                 print(
                     f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}."
@@ -221,7 +221,7 @@ def read_df_from_pg(
             try:
                 sql_query = f"SELECT * FROM {schema}.{table_name}"
 
-                df = pd.read_sql_query(sql_query, con=engine)
+                df = pd.read_sql_query(sql_query, con=connection)
                 print(
                     f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame."
                 )
