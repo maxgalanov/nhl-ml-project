@@ -144,8 +144,10 @@ def create_datamart(**kwargs):
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     df_games = result_df.toPandas()
+    teams_stat = teams_stat.toPandas()
+    
     df_games = df_games[
-        (df_games.game_date < current_date) & (df_games.game_type == 2)
+        (df_games.game_date < current_date)
     ].sort_values(by="game_date")
     df_games["home_team_winner"] = df_games["score_delta"].apply(
         lambda x: 0 if x < 0 else 1
