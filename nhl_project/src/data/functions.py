@@ -49,13 +49,13 @@ def get_information(endpoint, base_url="https://api-web.nhle.com"):
 
 
 def read_table_from_pg(
-        spark,
-        table_name,
-        username="maxglnv",
-        password = Variable.get("HSE_DB_PASSWORD"),
-        host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
-        port="6432",
-        database="hse_db"
+    spark,
+    table_name,
+    username="maxglnv",
+    password=Variable.get("HSE_DB_PASSWORD"),
+    host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
+    port="6432",
+    database="hse_db",
 ):
     """
     Загружает таблицу из PostgreSQL в Spark DataFrame.
@@ -70,32 +70,37 @@ def read_table_from_pg(
     with get_time():
         db_url = f"jdbc:postgresql://{host}:{port}/{database}"
         try:
-            df_table = spark.read \
-                .format("jdbc") \
-                .option("url", db_url) \
-                .option("driver", "org.postgresql.Driver") \
-                .option("dbtable", table_name) \
-                .option("user", username) \
-                .option("password", password) \
+            df_table = (
+                spark.read.format("jdbc")
+                .option("url", db_url)
+                .option("driver", "org.postgresql.Driver")
+                .option("dbtable", table_name)
+                .option("user", username)
+                .option("password", password)
                 .load()
-            
-            print(f"Данные успешно загружены из таблицы {table_name} PostgreSQL в Spark DataFrame.")
+            )
+
+            print(
+                f"Данные успешно загружены из таблицы {table_name} PostgreSQL в Spark DataFrame."
+            )
             return df_table
-        
+
         except Exception as e:
-            raise Exception(f"Произошла ошибка при чтении таблицы {table_name} из базы данных: {e}") from e
-    
+            raise Exception(
+                f"Произошла ошибка при чтении таблицы {table_name} из базы данных: {e}"
+            ) from e
+
 
 def write_table_to_pg(
-        df,
-        spark,
-        write_mode,
-        table_name,
-        username="maxglnv",
-        password = Variable.get("HSE_DB_PASSWORD"),
-        host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
-        port="6432",
-        database="hse_db"
+    df,
+    spark,
+    write_mode,
+    table_name,
+    username="maxglnv",
+    password=Variable.get("HSE_DB_PASSWORD"),
+    host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
+    port="6432",
+    database="hse_db",
 ):
     """
     Записывает данные из Spark DataFrame в таблицу PostgreSQL.
@@ -113,22 +118,22 @@ def write_table_to_pg(
     """
     with get_time():
         db_url = f"jdbc:postgresql://{host}:{port}/{database}"
-        df.cache() 
+        df.cache()
         print("Количество строк:", df.count())
 
         try:
-            df.write \
-                .mode(write_mode) \
-                .format("jdbc") \
-                .option("url", db_url) \
-                .option("driver", "org.postgresql.Driver") \
-                .option("dbtable", table_name) \
-                .option("user", username) \
-                .option("password", password) \
-                .save()
-            print(f"Spark DataFrame успешно записан в PostgreSQL в таблицу {table_name}.")
+            df.write.mode(write_mode).format("jdbc").option("url", db_url).option(
+                "driver", "org.postgresql.Driver"
+            ).option("dbtable", table_name).option("user", username).option(
+                "password", password
+            ).save()
+            print(
+                f"Spark DataFrame успешно записан в PostgreSQL в таблицу {table_name}."
+            )
         except Exception as e:
-            raise Exception(f"Произошла ошибка при записи таблицы {table_name} в базу данных: {e}") from e
+            raise Exception(
+                f"Произошла ошибка при записи таблицы {table_name} в базу данных: {e}"
+            ) from e
 
         print("Количество строк:", df.count())
         df.unpersist()
@@ -137,9 +142,9 @@ def write_table_to_pg(
 def write_df_to_pg(
     df,
     table_name,
-    schema='public',
+    schema="public",
     username="maxglnv",
-    password = Variable.get("HSE_DB_PASSWORD"),
+    password=Variable.get("HSE_DB_PASSWORD"),
     host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
     port="6432",
     database="hse_db",
@@ -163,24 +168,33 @@ def write_df_to_pg(
     Время выполнения операции записи измеряется и выводится.
     """
     with get_time():
-        connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        connection_string = (
+            f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        )
         engine = create_engine(connection_string)
 
-        try:
-            df.to_sql(table_name, engine, schema=schema, index=False, if_exists="replace")
-            print(f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}.")
-        except Exception as e:
-            raise Exception(f"Произошла ошибка при записи таблицы {schema}.{table_name} в базу данных: {e}") from e
+        with engine.connect() as connection:
+            try:
+                df.to_sql(
+                    table_name, engine, schema=schema, index=False, if_exists="replace"
+                )
+                print(
+                    f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}."
+                )
+            except Exception as e:
+                raise Exception(
+                    f"Произошла ошибка при записи таблицы {schema}.{table_name} в базу данных: {e}"
+                ) from e
 
 
 def read_df_from_pg(
-        table_name,
-        schema="public",
-        username="maxglnv",
-        password = Variable.get("HSE_DB_PASSWORD"),
-        host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
-        port="6432",
-        database="hse_db"
+    table_name,
+    schema="public",
+    username="maxglnv",
+    password=Variable.get("HSE_DB_PASSWORD"),
+    host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
+    port="6432",
+    database="hse_db",
 ):
     """
     Функция для чтения данных из таблицы базы данных PostgreSQL в pandas DataFrame.
@@ -198,14 +212,21 @@ def read_df_from_pg(
     pandas.DataFrame: Данные из указанной таблицы.
     """
     with get_time():
-        connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        connection_string = (
+            f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        )
         engine = create_engine(connection_string)
 
-        try:
-            sql_query = f"SELECT * FROM {schema}.{table_name}"
-            
-            df = pd.read_sql_query(sql_query, con=engine)
-            print(f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame.")
-            return df
-        except Exception as e:
-            raise Exception(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}") from e
+        with engine.connect() as connection:
+            try:
+                sql_query = f"SELECT * FROM {schema}.{table_name}"
+
+                df = pd.read_sql_query(sql_query, con=engine)
+                print(
+                    f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame."
+                )
+                return df
+            except Exception as e:
+                raise Exception(
+                    f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}"
+                ) from e
