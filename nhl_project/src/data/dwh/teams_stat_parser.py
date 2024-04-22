@@ -35,6 +35,10 @@ dag = DAG(
 def get_teams_stat_to_source(**kwargs):
     current_date = kwargs["ds"]
 
+    ts = kwargs['ts']
+    ts_datetime = datetime.fromisoformat(ts)
+    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
     spark = (
         SparkSession.builder.config(
             "spark.jars",
@@ -75,8 +79,6 @@ def get_teams_stat_to_source(**kwargs):
     teams_stat["placeName"] = teams_stat["placeName"].apply(
         lambda x: x.get("default", "") if type(x) == dict else ""
     )
-
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     df_teams_stat = (
         spark.createDataFrame(teams_stat)

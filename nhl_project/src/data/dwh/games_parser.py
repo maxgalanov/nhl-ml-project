@@ -35,6 +35,10 @@ dag = DAG(
 def get_games_to_source(**kwargs):
     current_date = kwargs["ds"]
 
+    ts = kwargs['ts']
+    ts_datetime = datetime.fromisoformat(ts)
+    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
     spark = (
         SparkSession.builder.config(
             "spark.jars",
@@ -45,7 +49,6 @@ def get_games_to_source(**kwargs):
         .getOrCreate()
     )
 
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data_games = get_information("/stats/rest/en/game", base_url="https://api.nhle.com")
 
     df_games_pd = pd.DataFrame(data_games["data"])

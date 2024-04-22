@@ -35,6 +35,10 @@ dag = DAG(
 def get_players_games_stat_to_source(**kwargs):
     current_date = kwargs["ds"]
 
+    ts = kwargs['ts']
+    ts_datetime = datetime.fromisoformat(ts)
+    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
     spark = (
         SparkSession.builder.master("local[*]")
         .appName("parse_players_games_stat")
@@ -63,8 +67,6 @@ def get_players_games_stat_to_source(**kwargs):
         lambda x: x.get("default", "") if type(x) == dict else ""
     )
     df_games["gameId"] = df_games.gameId.astype("int")
-
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     df_games_info = (
         spark.createDataFrame(df_games)

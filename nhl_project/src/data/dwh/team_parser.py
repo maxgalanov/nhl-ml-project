@@ -34,6 +34,9 @@ dag = DAG(
 
 def get_teams_to_source(**kwargs):
     current_date = kwargs["ds"]
+    ts = kwargs['ts']
+    ts_datetime = datetime.fromisoformat(ts)
+    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
 
     spark = (
         SparkSession.builder.config(
@@ -45,7 +48,6 @@ def get_teams_to_source(**kwargs):
         .getOrCreate()
     )
 
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data_teams = get_information("en/team", "https://api.nhle.com/stats/rest/")
     df_teams_pd = pd.DataFrame(data_teams["data"])
 

@@ -35,6 +35,10 @@ dag = DAG(
 def get_players_to_source(**kwargs):
     current_date = kwargs["ds"]
 
+    ts = kwargs['ts']
+    ts_datetime = datetime.fromisoformat(ts)
+    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
     spark = (
         SparkSession.builder.config(
             "spark.jars",
@@ -81,7 +85,6 @@ def get_players_to_source(**kwargs):
         lambda x: x.get("default", "") if type(x) == dict else ""
     )
 
-    dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     df_teams_roster = spark.createDataFrame(teams_roster) \
         .withColumn("_source_load_datetime", F.lit(dt)) \
         .withColumn("_source", F.lit("API_NHL"))
