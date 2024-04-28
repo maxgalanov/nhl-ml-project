@@ -149,7 +149,7 @@ def create_teams_games_datamarts():
     )
     
     df_games = (
-        result_df.filter((F.col("game_type") == 2 | (F.col("game_type") == 3)))
+        result_df.filter((F.col("game_type") == 2) | (F.col("game_type") == 3))
         .orderBy("game_date")
         .withColumn("home_team_winner", F.when(F.col("score_delta") < 0, 0).otherwise(1))
         .withColumn("game_date", F.to_date(F.col("game_date")))
