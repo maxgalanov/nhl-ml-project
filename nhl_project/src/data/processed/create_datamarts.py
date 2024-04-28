@@ -171,7 +171,7 @@ def create_teams_stat_agg():
         .getOrCreate()
     )
 
-    teams_stat = read_table_from_pg(spark, "public.teams_stat")
+    teams_stat = read_table_from_pg(spark, "public.teams_stat_wide_datamart")
 
     window_spec = Window.partitionBy("team_name", "season_id").orderBy(F.desc("date"))
 
