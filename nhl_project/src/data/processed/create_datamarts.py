@@ -22,7 +22,7 @@ DEFAULT_ARGS = {
 }
 
 dag = DAG(
-    dag_id="games_wide_datamart",
+    dag_id="create_datamarts",
     schedule_interval="30 13 * * *",
     start_date=days_ago(2),
     catchup=False,
