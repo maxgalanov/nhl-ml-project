@@ -52,7 +52,7 @@ def register_bot_commands(bot):
             "Я могу показать результаты игр за неделю с помощью команды /results\n"
             "Информация по игрокам: /player_stats\n"
             "Информация по командам: /team_stats\n"
-            "Выбрать любимую команду: /set_favorite_team\n"
+            # "Выбрать любимую команду: /set_favorite_team\n"
             "Дашборды в DataLens: /datalens"
         )
         await bot.send_message(message.chat.id, start_text)
