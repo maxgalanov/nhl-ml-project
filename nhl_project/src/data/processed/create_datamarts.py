@@ -156,6 +156,19 @@ def create_teams_games_datamarts():
         .withColumn("game_month", F.month(F.col("game_date")))
     )
 
+    yesterday = datetime.now() - timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y-%m-%d')
+
+    df_games = df_games.filter(
+        (F.col("home_score") != 0)
+        | (F.col("visiting_score") != 0)
+        | (
+            (F.col("home_score") == 0)
+            & (F.col("visiting_score") == 0)
+            & (F.col("game_date") >= F.lit(yesterday_str))
+        )
+    )
+
     write_table_to_pg(df_games, spark, "overwrite", "public.games_wide_datamart")
     write_table_to_pg(teams_stat, spark, "overwrite", "public.teams_stat_wide_datamart")
 
