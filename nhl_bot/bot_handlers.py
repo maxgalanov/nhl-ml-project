@@ -1,5 +1,6 @@
 from telebot import types
 from database import DatabasePool
+from datetime import datetime
 from telebot.asyncio_handler_backends import StatesGroup, State
 import queries as q
 from telebot import types
@@ -23,18 +24,22 @@ class TeamStates(StatesGroup):
 class UserStates(StatesGroup):
     favorite_team = State()
 
+class BetStates(StatesGroup):
+    select_game = State()
+    select_winner = State()
+    enter_score = State()
+
 async def send_svg_as_png(bot, chat_id, svg_url):
     try:
         response = requests.get(svg_url)
-        response.raise_for_status()  # Проверка на успешный ответ
+        response.raise_for_status()
         svg_data = response.content
 
         # Конвертация SVG в PNG
         png_data = cairosvg.svg2png(bytestring=svg_data)
 
-        # Создание объекта BytesIO из PNG данных
         png_image = io.BytesIO(png_data)
-        png_image.seek(0)  # Перемещаем указатель в начало файла
+        png_image.seek(0)
 
         await bot.send_photo(chat_id, png_image)
     except requests.RequestException as e:
@@ -53,6 +58,7 @@ def register_bot_commands(bot):
             "Информация по игрокам: /player_stats\n"
             "Информация по командам: /team_stats\n"
             # "Выбрать любимую команду: /set_favorite_team\n"
+            "Сделать прогноз на исход ближайших матчей: /make_bet\n"
             "Дашборды в DataLens: /datalens"
         )
         await bot.send_message(message.chat.id, start_text)
@@ -312,4 +318,108 @@ def register_bot_commands(bot):
             except Exception as e:
                 await bot.send_message(message.chat.id, f"Произошла ошибка {e}.", reply_markup=types.ReplyKeyboardRemove())
 
+        await bot.delete_state(message.from_user.id, message.chat.id)
+
+
+    ######################################################
+    ##################### Users Bets #####################
+    ######################################################
+
+    @bot.message_handler(commands=["make_bet"])
+    async def make_bet(message):
+        games_df = db_pool.query_to_dataframe(q.get_upcoming_games_query())
+
+        if games_df.empty:
+            await bot.send_message(message.chat.id, "Нет матчей для прогнозов.")
+            return
+
+        markup = types.InlineKeyboardMarkup()
+        for index, row in games_df.iterrows():
+            try:
+                moscow_time = datetime.strptime(str(row['moscow_time']), '%Y-%m-%d %H:%M:%S%z').strftime('%m-%d %H:%M')
+                button_text = f"{moscow_time} {row['home_team_name']} vs {row['visiting_team_name']}"
+                markup.add(types.InlineKeyboardButton(text=button_text, callback_data=f"game_{row['game_source_id']}"))
+            except ValueError as e:
+                print(f"Ошибка преобразования даты: {e}")
+
+        await bot.send_message(message.chat.id, "Выберите матч для прогноза:", reply_markup=markup)
+        await bot.set_state(message.from_user.id, BetStates.select_game, message.chat.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("game_"))
+    async def select_winner(call):
+        game_id = int(call.data.split("_")[1])
+        game_details = db_pool.query_to_dataframe(q.get_game_details_query(game_id))
+
+        if game_details.empty:
+            await bot.send_message(call.message.chat.id, "Информация о матче не найдена.")
+            return
+
+        game = game_details.iloc[0]
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton(game['home_team_name'], callback_data=f"winner_{game_id}_home"),
+            types.InlineKeyboardButton(game['visiting_team_name'], callback_data=f"winner_{game_id}_visiting")
+        )
+
+        await bot.send_message(call.message.chat.id, "Выберите победителя:", reply_markup=markup)
+        await bot.set_state(call.from_user.id, BetStates.select_winner, call.message.chat.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("winner_"))
+    async def enter_score(call):
+        game_id, winner_team = call.data.split("_")[1], call.data.split("_")[2]
+        winner = True if winner_team == 'home' else False
+
+        async with bot.retrieve_data(call.from_user.id, call.message.chat.id) as data:
+            data['game_id'] = game_id
+            data['home_team_winner'] = winner
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton("Да", callback_data=f"score_{game_id}"),
+            types.InlineKeyboardButton("Нет", callback_data=f"noscore_{game_id}")
+        )
+
+        await bot.send_message(call.message.chat.id, "Хотите предсказать точный счет?", reply_markup=markup)
+
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("score_") or call.data.startswith("noscore_"))
+    async def save_bet(call):
+        game_id = int(call.data.split("_")[1])
+        if call.data.startswith("noscore_"):
+            async with bot.retrieve_data(call.from_user.id, call.message.chat.id) as data:
+                db_pool.execute_query(q.save_user_bet(call.from_user.id, data['game_id'], data['home_team_winner']))
+            await bot.send_message(call.message.chat.id, "Ваш прогноз сохранен!")
+            await bot.delete_state(call.from_user.id, call.message.chat.id)
+        elif call.data.startswith("score_"):
+            await bot.send_message(call.message.chat.id, "Введите счет в формате 'home:away'")
+            await bot.set_state(call.from_user.id, BetStates.enter_score, call.message.chat.id)
+
+
+    @bot.message_handler(state=BetStates.enter_score)
+    async def process_score(message):
+        try:
+            home_score, visiting_score = map(int, message.text.split(":"))
+        except ValueError:
+            await bot.send_message(message.chat.id, "Некорректный формат. Попробуйте еще раз.")
+            return
+
+        async with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+            home_team_winner = data['home_team_winner']
+
+            # Проверка соответствия счета с выбранным победителем
+            if home_team_winner and home_score <= visiting_score:
+                await bot.send_message(message.chat.id, "Предполагаемый счет неверен, так как ожидается победа домашней команды.")
+                return
+            elif not home_team_winner and home_score >= visiting_score:
+                await bot.send_message(message.chat.id, "Предполагаемый счет неверен, так как ожидается победа гостевой команды.")
+                return
+
+            # Сохранение корректного счета в БД
+            db_pool.execute_query(q.save_user_bet(message.from_user.id, 
+                                                data['game_id'], 
+                                                home_team_winner, 
+                                                home_score, 
+                                                visiting_score))
+
+        await bot.send_message(message.chat.id, "Ваш прогноз со счетом сохранен!")
         await bot.delete_state(message.from_user.id, message.chat.id)

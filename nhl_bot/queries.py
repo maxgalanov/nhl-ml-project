@@ -49,3 +49,44 @@ def get_teams_query():
         WHERE True
             AND season_id = (SELECT max(season_id) FROM public.teams_stat_agg)
     """
+
+def get_upcoming_games_query():
+    return """
+        SELECT game_source_id, eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time, home_team_name, visiting_team_name, 
+        CASE WHEN game_type = 2 THEN 'regular' ELSE 'playoff' END as game_type
+        FROM public.games_wide_datamart
+        WHERE True
+            AND eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
+            AND home_score = 0 AND visiting_score = 0
+    """
+
+def save_user_bet(user_id, game_id, home_team_winner, home_score=0, visiting_score=0):
+    return f"""
+        INSERT INTO public.users_bets (
+            user_id, 
+            game_id, 
+            home_team_winner, 
+            home_score, 
+            visiting_score, 
+            selected_at
+        ) VALUES (
+            {user_id}, 
+            {game_id}, 
+            {home_team_winner}, 
+            {home_score}, 
+            {visiting_score}, 
+            NOW()
+        )
+        ON CONFLICT (user_id, game_id) DO UPDATE SET
+            home_team_winner = EXCLUDED.home_team_winner,
+            home_score = EXCLUDED.home_score,
+            visiting_score = EXCLUDED.visiting_score,
+            selected_at = NOW();
+    """
+
+def get_game_details_query(game_id):
+    return f"""
+        SELECT game_source_id, eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time, home_team_name, visiting_team_name
+        FROM public.games_wide_datamart
+        WHERE game_source_id = {game_id}
+    """
