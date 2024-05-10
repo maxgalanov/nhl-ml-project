@@ -2,6 +2,7 @@ from telebot import types
 from database import DatabasePool
 from datetime import datetime
 from telebot.asyncio_handler_backends import StatesGroup, State
+from urllib.parse import quote
 import queries as q
 from telebot import types
 import cairosvg, requests
@@ -54,11 +55,13 @@ def register_bot_commands(bot):
     async def start_message(message):
         start_text = (
             "Привет!\n"
-            "Я могу показать результаты игр за неделю с помощью команды /results\n"
-            "Информация по игрокам: /player_stats\n"
-            "Информация по командам: /team_stats\n"
+            "Вот, что я умею:\n"
+            "Показать результаты игр за последние 7 дней: /results\n"
+            "Статистика игроков: /player_stats\n"
+            "Статистика команд: /team_stats\n"
             # "Выбрать любимую команду: /set_favorite_team\n"
             "Сделать прогноз на исход ближайших матчей: /make_bet\n"
+            "Посмотреть прогноз ML модели на ближайшие матчи: /show_preds\n"
             "Дашборды в DataLens: /datalens"
         )
         await bot.send_message(message.chat.id, start_text)
@@ -81,28 +84,28 @@ def register_bot_commands(bot):
 
             for index, row in results.iterrows():
                 if last_date is not None and last_date != row['game_date']:
-                    response += "\n"  # Добавляем пустую строку между датами
+                    response += "\n\n"
 
                 # Определение победителя и добавление эмодзи кубка
                 if row['home_score'] > row['visiting_score']:
-                    home_team = f"🏆 {row['home_team_name']}"
+                    home_team = f"🏆 <b>{row['home_team_name']}</b>"
                     visiting_team = row['visiting_team_name']
                 elif row['home_score'] < row['visiting_score']:
                     home_team = row['home_team_name']
-                    visiting_team = f"{row['visiting_team_name']} 🏆"
+                    visiting_team = f"<b>{row['visiting_team_name']}</b> 🏆"
                 else:
                     home_team = row['home_team_name']
                     visiting_team = row['visiting_team_name']
 
                 game_info = f"{row['game_date']}   {home_team} {row['home_score']} : {row['visiting_score']} {visiting_team}"
-                response += game_info + "\n"
+                response += game_info + "\n\n"
                 last_date = row['game_date']  # Обновляем последнюю дату
 
             if response.endswith("\n"):
-                response = response[:-1]  # Удаляем лишний перенос строки в конце, если он есть
-            await bot.send_message(message.chat.id, response)
+                response = response[:-1]
+            await bot.send_message(message.chat.id, response, parse_mode='HTML')
         except Exception as e:
-            await bot.send_message(message.chat.id, f"Извините, произошла ошибка {e}при получении результатов.")
+            await bot.send_message(message.chat.id, f"Извините, произошла ошибка {e} при получении результатов.")
 
 
     @bot.message_handler(commands=["player_stats"])
@@ -120,7 +123,7 @@ def register_bot_commands(bot):
 
         await bot.set_state(message.from_user.id, PlayerStates.name, message.chat.id)
         await bot.send_message(message.chat.id,
-                            "Введите имя, например Alex Ovechkin" if message.text == 'Полевой игрок' else "Введите имя, например Sergei Bobrovsky",
+                            "Введите имя, например, Alex Ovechkin" if message.text == 'Полевой игрок' else "Введите имя, например, Sergei Bobrovsky",
                                 reply_markup=markup)
 
         try:
@@ -149,38 +152,46 @@ def register_bot_commands(bot):
 
                 if df.empty:
                     raise ValueError("Игрок не найден.")
-                
+            
             player_info = df.iloc[0]
 
+            # Отправка фото игрока
             await bot.send_photo(message.chat.id, player_info['headshot'], reply_markup=markup)
 
-            response = "Дата рождения: " + str(player_info["birth_date"]) + "\n"
-            response += "Возраст: " + str(int(player_info["years_old"])) + "\n"
-            response += "Страна: " + str(player_info["birth_country"]) + "\n"
-            response += "Город: " + str(player_info["birth_city"]) + "\n"
-            response += "Команда: " + str(player_info["team_full_name"]) + " (" + str(player_info["team_business_id"]) + ")" + "\n"
-            response += "Игр сыграно: " + str(int(player_info["game_cnt"])) + "\n"
+            # Формируем сообщение с основной информацией об игроке
+            response = (
+                f"Дата рождения: {player_info['birth_date']}\n"
+                f"Возраст: {int(player_info['years_old'])}\n"
+                f"Страна: {player_info['birth_country']}\n"
+                f"Город: {player_info['birth_city']}\n"
+                f"Команда: {player_info['team_full_name']} ({player_info['team_business_id']})\n"
+                f"Игр сыграно: {int(player_info['game_cnt'])}\n"
+            )
+
             if player_type == 'skaters_agg':
-                response += "Очков: " + str(int(player_info["points"])) + "\n"
-                response += "Голов: " + str(int(player_info["goals"])) + "\n"
-                response += "Показатель полезности: " + str(int(player_info["plus_minus"])) + "\n"
+                response += (
+                    f"Очков: {int(player_info['points'])}\n"
+                    f"Голов: {int(player_info['goals'])}\n"
+                    f"Показатель полезности: {int(player_info['plus_minus'])}\n"
+                )
             else:
-                response += "Процент отраженных бросков: " + str(round(player_info["shots_against_pctg"], 2)) + "\n"
+                response += f"Процент отраженных бросков: {round(player_info['shots_against_pctg'], 2)}\n"
 
             await bot.send_message(message.chat.id, response, reply_markup=markup)
 
+            player_name_encoded = quote(player_name)
+
             if player_type == 'skaters_agg':
-                await bot.send_message(
-                    message.chat.id,
-                    f"""Более подробную информацию можете посмотреть в нашем [дашборде по игрокам](https://datalens.yandex/xqnhz02g6x6ml?tab=lD&player_full_name_s={player_name.split(' ')[0]}%20{player_name.split(' ')[1]})""",
-                    parse_mode="MarkdownV2",
-                    )
-            elif player_type == "goalies_agg":
-                await bot.send_message(
-                    message.chat.id,
-                    f"""Более подробную информацию можете посмотреть в нашем [дашборде по игрокам](https://datalens.yandex/xqnhz02g6x6ml?tab=24G&player_full_name_g={player_name.split(' ')[0]}%20{player_name.split(' ')[1]})""",
-                    parse_mode="MarkdownV2",
-                )
+                dashboard_url = f"https://datalens.yandex/xqnhz02g6x6ml?tab=lD&player_full_name_s={player_name_encoded}"
+            else:
+                dashboard_url = f"https://datalens.yandex/xqnhz02g6x6ml?tab=24G&player_full_name_g={player_name_encoded}"
+
+            await bot.send_message(
+                message.chat.id,
+                f"Более подробную информацию можете посмотреть в нашем [дашборде по игрокам]({dashboard_url})",
+                parse_mode="MarkdownV2",
+            )
+
             await bot.delete_state(message.from_user.id, message.chat.id)
 
         except Exception as e:
@@ -225,11 +236,17 @@ def register_bot_commands(bot):
             response += f"Побед: {team_info['wins']} ({100 * team_info['win_pctg']:.2f}%)\nЗабито голов: {team_info['goal_for']}, Пропущено голов: {team_info['goal_against']}"
 
             await bot.send_message(message.chat.id, response, reply_markup=types.ReplyKeyboardRemove())
+
+            team_name_encoded = quote(team_info['team_name'])
+
+            dashboard_url = f"https://datalens.yandex/xqnhz02g6x6ml?tab=jAE&team_name_field_id={team_name_encoded}"
+
             await bot.send_message(
-                    message.chat.id,
-                    f"""Более подробную информацию можете посмотреть в нашем [дашборде по командам](https://datalens.yandex/xqnhz02g6x6ml?tab=jAE&team_name_field_id={team_info['team_name'].split(' ')[0]}%20{team_info['team_name'].split(' ')[1]})""",
-                    parse_mode="MarkdownV2",
-                )
+                message.chat.id,
+                f"Более подробную информацию можете посмотреть в нашем [дашборде по командам]({dashboard_url})",
+                parse_mode="MarkdownV2",
+            )
+
             await bot.delete_state(message.from_user.id, message.chat.id)
 
         except Exception as e:
@@ -327,7 +344,8 @@ def register_bot_commands(bot):
 
     @bot.message_handler(commands=["make_bet"])
     async def make_bet(message):
-        games_df = db_pool.query_to_dataframe(q.get_upcoming_games_query())
+        user_id = message.from_user.id
+        games_df = db_pool.query_to_dataframe(q.get_upcoming_games_query(user_id))
 
         if games_df.empty:
             await bot.send_message(message.chat.id, "Нет матчей для прогнозов.")
@@ -335,12 +353,10 @@ def register_bot_commands(bot):
 
         markup = types.InlineKeyboardMarkup()
         for index, row in games_df.iterrows():
-            try:
-                moscow_time = datetime.strptime(str(row['moscow_time']), '%Y-%m-%d %H:%M:%S%z').strftime('%m-%d %H:%M')
-                button_text = f"{moscow_time} {row['home_team_name']} vs {row['visiting_team_name']}"
-                markup.add(types.InlineKeyboardButton(text=button_text, callback_data=f"game_{row['game_source_id']}"))
-            except ValueError as e:
-                print(f"Ошибка преобразования даты: {e}")
+            moscow_time = datetime.strptime(str(row['moscow_time']), '%Y-%m-%d %H:%M:%S%z').strftime('%m-%d %H:%M')
+            bet_indicator = "✅" if row['bet_placed'] else ""
+            button_text = f"{moscow_time} {row['home_team_name']} vs {row['visiting_team_name']} {bet_indicator}"
+            markup.add(types.InlineKeyboardButton(text=button_text, callback_data=f"game_{row['game_source_id']}"))
 
         await bot.send_message(message.chat.id, "Выберите матч для прогноза:", reply_markup=markup)
         await bot.set_state(message.from_user.id, BetStates.select_game, message.chat.id)
@@ -423,3 +439,29 @@ def register_bot_commands(bot):
 
         await bot.send_message(message.chat.id, "Ваш прогноз со счетом сохранен!")
         await bot.delete_state(message.from_user.id, message.chat.id)
+
+
+    ######################################################
+    ################### ML predictions ###################
+    ######################################################
+
+    @bot.message_handler(commands=["show_preds"])
+    async def show_preds(message):
+        games_df = db_pool.query_to_dataframe(q.get_upcoming_preds_query())
+
+        if games_df.empty:
+            await bot.send_message(message.chat.id, "Нет предстоящих матчей с прогнозами.")
+            return
+
+        response = "Вот предсказания на ближайшие 2 дня:\n\n"
+
+        for index, row in games_df.iterrows():
+            moscow_time = datetime.strptime(str(row['moscow_time']), '%Y-%m-%d %H:%M:%S%z').strftime('%m-%d %H:%M')
+
+            winner = row['home_team_name'] if row['home_team_win'] else row['visiting_team_name']
+            if row['home_team_win']:
+                response += f"{moscow_time} 🏆 <b>{row['home_team_name']}</b> vs {row['visiting_team_name']}\n\n"
+            else:
+                response += f"{moscow_time} {row['home_team_name']} vs <b>{row['visiting_team_name']}</b> 🏆\n\n"
+        response += "* Сортировка по убыванию уверенности модели."
+        await bot.send_message(message.chat.id, response, parse_mode='HTML')

@@ -50,14 +50,20 @@ def get_teams_query():
             AND season_id = (SELECT max(season_id) FROM public.teams_stat_agg)
     """
 
-def get_upcoming_games_query():
-    return """
-        SELECT game_source_id, eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time, home_team_name, visiting_team_name, 
-        CASE WHEN game_type = 2 THEN 'regular' ELSE 'playoff' END as game_type
-        FROM public.games_wide_datamart
-        WHERE True
-            AND eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
-            AND home_score = 0 AND visiting_score = 0
+def get_upcoming_games_query(user_id):
+    return f"""
+        SELECT
+            g.game_source_id,
+            g.eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time,
+            g.home_team_name,
+            g.visiting_team_name,
+            CASE WHEN b.user_id IS NULL THEN false ELSE true END as bet_placed
+        FROM public.games_wide_datamart g
+        LEFT JOIN public.users_bets b ON g.game_source_id = b.game_id AND b.user_id = {user_id}
+        WHERE g.eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
+        AND g.home_score = 0 AND g.visiting_score = 0
+        ORDER BY g.eastern_start_time;
+
     """
 
 def save_user_bet(user_id, game_id, home_team_winner, home_score=0, visiting_score=0):
@@ -89,4 +95,32 @@ def get_game_details_query(game_id):
         SELECT game_source_id, eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time, home_team_name, visiting_team_name
         FROM public.games_wide_datamart
         WHERE game_source_id = {game_id}
+    """
+
+def get_upcoming_preds_query():
+    return f"""
+        WITH prep as (
+        SELECT 
+            game_source_id, 
+            eastern_start_time::timestamp at time zone 'UTC+3' as moscow_time,
+            home_team_name, 
+            visiting_team_name, 
+            home_team_win,
+            home_team_win_proba,
+            case when home_team_win = 1 then 10 * round(home_team_win_proba::numeric, 1) else 10 * round(1 - home_team_win_proba::numeric, 1) end as confidence_level,
+            row_number() over (partition by home_team_name, visiting_team_name order by eastern_start_time) as rn
+        FROM public.games_winner_prediction
+        WHERE True
+            AND eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
+        )
+        SELECT
+            game_source_id, 
+            moscow_time,
+            home_team_name, 
+            visiting_team_name, 
+            home_team_win,
+            confidence_level
+        FROM prep
+        WHERE rn = 1
+        ORDER BY home_team_win_proba DESC
     """

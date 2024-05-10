@@ -14,14 +14,15 @@ register_bot_commands(bot)
 
 async def setup_bot_commands():
     await bot.set_my_commands([
-        types.BotCommand("/start", "Start command"),
-        types.BotCommand("/results", "Show results of last week's games"),
-        types.BotCommand("/player_stats", "Get statistics for a player"),
-        types.BotCommand("/team_stats", "Get statistics for a team"),
-        # types.BotCommand("/set_favorite_team", "Set favorite team"),
-        types.BotCommand("/make_bet", "Guess the results of upcoming games"),
-        types.BotCommand("/datalens", "Dashboard"),
-        types.BotCommand("/cancel", "Cancel current operation"),
+        types.BotCommand("/start", "Старт"),
+        types.BotCommand("/results", "Показать результаты игр за последние 7 дней"),
+        types.BotCommand("/player_stats", "Статистика игроков"),
+        types.BotCommand("/team_stats", "Статистика команд"),
+        # types.BotCommand("/set_favorite_team", "Выбрать любимую команду"),
+        types.BotCommand("/make_bet", "Сделать прогноз на исход ближайших матчей"),
+        types.BotCommand("/show_preds", "Посмотреть прогноз ML модели на ближайшие матчи"),
+        types.BotCommand("/datalens", "Дашборды в DataLens"),
+        types.BotCommand("/cancel", "Сбросить введенные данные"),
     ])
 
 asyncio.run(setup_bot_commands())
