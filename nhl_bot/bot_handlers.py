@@ -355,7 +355,19 @@ def register_bot_commands(bot):
         for index, row in games_df.iterrows():
             moscow_time = datetime.strptime(str(row['moscow_time']), '%Y-%m-%d %H:%M:%S%z').strftime('%m-%d %H:%M')
             bet_indicator = "✅" if row['bet_placed'] else ""
-            button_text = f"{moscow_time} {row['home_team_name']} vs {row['visiting_team_name']} {bet_indicator}"
+
+            home_team_name = row['home_team_name'].split(' ')
+            visiting_team_name = row['visiting_team_name'].split(' ')
+            if len(home_team_name) > 2:
+                home_team_name = home_team_name[0] + ' ' + home_team_name[1] + ' ' + home_team_name[2][:3]
+            else:
+                home_team_name = home_team_name[0] + ' ' + home_team_name[1][:3]
+            if len(visiting_team_name) > 2:
+                visiting_team_name = visiting_team_name[0] + ' ' + visiting_team_name[1] + ' ' + visiting_team_name[2][:3]
+            else:
+                visiting_team_name = visiting_team_name[0] + ' ' + visiting_team_name[1][:3]
+
+            button_text = f"{bet_indicator} {moscow_time} {home_team_name} vs {visiting_team_name}"
             markup.add(types.InlineKeyboardButton(text=button_text, callback_data=f"game_{row['game_source_id']}"))
 
         await bot.send_message(message.chat.id, "Выберите матч для прогноза:", reply_markup=markup)
@@ -397,19 +409,27 @@ def register_bot_commands(bot):
 
         await bot.send_message(call.message.chat.id, "Хотите предсказать точный счет?", reply_markup=markup)
 
-
     @bot.callback_query_handler(func=lambda call: call.data.startswith("score_") or call.data.startswith("noscore_"))
     async def save_bet(call):
         game_id = int(call.data.split("_")[1])
+        telegram_user_id = call.from_user.id
+
         if call.data.startswith("noscore_"):
             async with bot.retrieve_data(call.from_user.id, call.message.chat.id) as data:
                 db_pool.execute_query(q.save_user_bet(call.from_user.id, data['game_id'], data['home_team_winner']))
             await bot.send_message(call.message.chat.id, "Ваш прогноз сохранен!")
             await bot.delete_state(call.from_user.id, call.message.chat.id)
+            
+            # Добавление ссылки на дашборд
+            dashboard_url = f"https://datalens.yandex/xqnhz02g6x6ml?tab=ZwW&user_bets_id=0&user_bets_id={telegram_user_id}"
+            await bot.send_message(
+                call.message.chat.id,
+                f"[Посмотреть свои прогнозы]({dashboard_url})",
+                parse_mode="MarkdownV2",
+            )
         elif call.data.startswith("score_"):
             await bot.send_message(call.message.chat.id, "Введите счет в формате 'home:away'")
             await bot.set_state(call.from_user.id, BetStates.enter_score, call.message.chat.id)
-
 
     @bot.message_handler(state=BetStates.enter_score)
     async def process_score(message):
@@ -438,6 +458,16 @@ def register_bot_commands(bot):
                                                 visiting_score))
 
         await bot.send_message(message.chat.id, "Ваш прогноз со счетом сохранен!")
+        
+        # Ссылка на DataLens
+        telegram_user_id = message.from_user.id
+        dashboard_url = f"https://datalens.yandex/xqnhz02g6x6ml?tab=ZwW&user_bets_id=0&user_bets_id={telegram_user_id}"
+        await bot.send_message(
+            message.chat.id,
+            f"[Посмотреть свои прогнозы]({dashboard_url})",
+            parse_mode="MarkdownV2",
+        )
+
         await bot.delete_state(message.from_user.id, message.chat.id)
 
 
