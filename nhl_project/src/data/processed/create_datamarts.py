@@ -23,7 +23,7 @@ DEFAULT_ARGS = {
 
 dag = DAG(
     dag_id="create_datamarts",
-    schedule_interval="30 13 * * *",
+    schedule_interval="30 9 * * *",
     start_date=days_ago(2),
     catchup=False,
     tags=["hse_nhl_ml_project"],
