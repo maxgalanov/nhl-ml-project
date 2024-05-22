@@ -1,6 +1,7 @@
 import pandas as pd
 import requests
 from datetime import datetime
+import psycopg2
 
 from airflow.models import Variable
 from sqlalchemy import create_engine
@@ -136,3 +137,76 @@ def write_table_to_pg(
 
         print("Количество строк:", df.count())
         df.unpersist()
+
+
+def write_into_database(
+    df: pd.DataFrame,
+    table_name: str,
+    query: str,
+    force=True,
+    schema="public",
+    username="maxglnv",
+    password=Variable.get("HSE_DB_PASSWORD"),
+    host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
+    port="6432",
+    database="hse_db",
+) -> None:
+    with get_time():
+        conn = psycopg2.connect(
+            database=database,
+            host=host,
+            user=username,
+            password=password,
+            port=port,
+        )
+
+        conn.autocommit = False
+        cursor = conn.cursor()
+
+        if force:
+            cursor.execute(f"delete from {schema}.{table_name}")
+
+        cursor.executemany(query, df.values.tolist())
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"DataFrame успешно записан в PostgreSQL в таблицу {schema}.{table_name}.")
+
+
+def read_df_from_pg(
+        table_name,
+        schema="public",
+        username="maxglnv",
+        password=Variable.get("HSE_DB_PASSWORD"),
+        host="rc1b-diwt576i60sxiqt8.mdb.yandexcloud.net",
+        port="6432",
+        database="hse_db"
+):
+    """
+    Функция для чтения данных из таблицы базы данных PostgreSQL в pandas DataFrame.
+
+    Параметры:
+    table_name (str): Имя таблицы для чтения данных.
+    schema (str): Схема базы данных.
+    username (str): Имя пользователя для подключения к базе данных.
+    password (str): Пароль пользователя.
+    host (str): Хост, на котором расположена база данных.
+    port (str): Порт для подключения к базе данных.
+    database (str): Имя базы данных.
+
+    Возвращает:
+    pandas.DataFrame: Данные из указанной таблицы.
+    """
+    with get_time():
+        connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        engine = create_engine(connection_string)
+
+        try:
+            sql_query = f"SELECT * FROM {schema}.{table_name}"
+            
+            df = pd.read_sql_query(sql_query, con=engine)
+            print(f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame.")
+            return df
+        except Exception as e:
+            raise Exception(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}") from e
