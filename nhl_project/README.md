@@ -10,16 +10,10 @@ Project Organization
     ├── Makefile                   <- Makefile with commands like `make data` or `make train`
     ├── README.md                  <- The top-level README for developers using this project.
     ├── data
-    │   ├── dwh                    <- DWH data.
-    │   │   ├── source             <- The original, immutable data dump.
-    │   │   └── vault
-    │   │       ├── reporting      <- Final DataMarts.
-    │   │       ├── common         <- Common DWH layer (Datamart,PIT).
-    │   │       ├── detailed       <- Detailed DWH layer (Hub, satelit, link).
-    │   │       ├── operational    <- Operational DWH layer.
-    │   │       └── staging        <- Staging DWH layer.
-    │   └── processed              <- The final, canonical data sets for modeling.
-    │   
+    │   ├── external               <- Data from third party sources.
+    │   ├── interim                <- Intermediate data that has been transformed.
+    │   ├── processed              <- The final, canonical data sets for modeling.
+    │   └── raw                    <- The original, immutable data dump.
     │
     ├── docs                       <- A default Sphinx project; see sphinx-doc.org for details
     │
