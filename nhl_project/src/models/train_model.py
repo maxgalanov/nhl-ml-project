@@ -1,7 +1,6 @@
 import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
-import pickle
 
 from sklearn.linear_model import CatBoostClassifier
 from pyspark.sql import SparkSession
@@ -10,7 +9,7 @@ from airflow.models import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-from nhl_project.src.data.functions import read_table_from_pg
+from nhl_project.src.data.functions import read_table_from_pg, save_object, load_object
 
 
 DEFAULT_ARGS = {
@@ -31,33 +30,6 @@ dag = DAG(
     default_args=DEFAULT_ARGS,
     description="Create datamart with games statistics",
 )
-
-
-def save_object(obj, file_name, filepath='/nhl_project/models/'):
-    """
-    Сохраняет объект в файл в формате pickle.
-
-    :param obj: Объект для сохранения.
-    :param filepath: Путь к файлу, в который будет сохранен объект.
-    """
-    with open(filepath + file_name, 'wb') as file:
-        pickle.dump(obj, file)
-
-    print(f'Объект сохранен в {filepath + file_name}')
-
-
-def load_object(filepath='/nhl_project/models/'):
-    """
-    Загружает объект из файла в формате pickle.
-
-    :param filepath: Путь к файлу, из которого будет загружен объект.
-    :return: Загруженный объект.
-    """
-    with open(filepath, 'rb') as file:
-        obj = pickle.load(file)
-
-    print(f'Объект загружен из {filepath}')
-    return obj
 
 
 def fill_na_by_team(group):
@@ -222,16 +194,24 @@ def make_dataset():
     )
     games_merged.drop(columns=["eastern_dt"], inplace=True)
 
-    numeric_cols = games_merged.select_dtypes(include=[np.number]).columns
-    games_merged[numeric_cols] = games_merged[numeric_cols].replace([np.inf, -np.inf], np.nan)
-    games_merged[numeric_cols] = games_merged[numeric_cols].fillna(games_merged[numeric_cols].mean())
+    numeric_cols = games_merged.select_dtypes(include=["number"]).columns
+    for col in numeric_cols:
+        games_merged[col] = games_merged.groupby(
+            ["season", "home_team_code", "visiting_team_code"]
+        )[col].transform(lambda x: x.fillna(x.mean()))
 
-    save_object(games_merged, 'nhl_project/data/processed/model_dataset.pkl')
+    string_cols = games_merged.select_dtypes(include=["object"]).columns
+    for col in string_cols:
+        games_merged[col] = games_merged.groupby(
+            ["season", "home_team_code", "visiting_team_code"]
+        )[col].transform(lambda x: x.fillna(x.mode()[0]))
+
+    save_object(games_merged, 'home/airflow/nhl-ml-project/nhl_project/data/processed/model_dataset.pkl')
 
 
 def train_model():
-    model_dataset = load_object('nhl_project/data/processed/model_dataset.pkl')
-    top_features = load_object('nhl_project/data/processed/top_features.pkl')
+    model_dataset = load_object('home/airflow/nhl-ml-project/nhl_project/data/processed/model_dataset.pkl')
+    top_features = load_object('home/airflow/nhl-ml-project/nhl_project/data/processed/top_features.pkl')
 
     today = datetime.now()
     yesterday = (today - timedelta(days=2)).strftime('%Y-%m-%d')
@@ -277,7 +257,7 @@ def train_model():
 
     catboost_cl_top.fit(X_train_top, y_train, verbose=500)
 
-    save_object(catboost_cl_top, 'nhl_project/models/trained_model.pkl')
+    save_object(catboost_cl_top, 'home/airflow/nhl-ml-project/nhl_project/models/trained_model.pkl')
 
 
 task_make_dataset = PythonOperator(

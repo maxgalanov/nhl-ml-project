@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 import psycopg2
+import pickle
 
 from airflow.models import Variable
 from sqlalchemy import create_engine
@@ -210,3 +211,30 @@ def read_df_from_pg(
             return df
         except Exception as e:
             raise Exception(f"Произошла ошибка при чтении таблицы {schema}.{table_name} из базы данных: {e}") from e
+        
+
+def save_object(obj, filepath='home/airflow/nhl-ml-project/nhl_project/models/'):
+    """
+    Сохраняет объект в файл в формате pickle.
+
+    :param obj: Объект для сохранения.
+    :param filepath: Путь к файлу, в который будет сохранен объект.
+    """
+    with open(filepath, 'wb') as file:
+        pickle.dump(obj, file)
+
+    print(f'Объект сохранен в {filepath}')
+
+
+def load_object(filepath='home/airflow/nhl-ml-project/nhl_project/models/'):
+    """
+    Загружает объект из файла в формате pickle.
+
+    :param filepath: Путь к файлу, из которого будет загружен объект.
+    :return: Загруженный объект.
+    """
+    with open(filepath, 'rb') as file:
+        obj = pickle.load(file)
+
+    print(f'Объект загружен из {filepath}')
+    return obj
