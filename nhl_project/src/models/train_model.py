@@ -304,6 +304,7 @@ def train_model():
         depth=6,
         l2_leaf_reg=7,
         cat_features=categorical_features_top,
+        train_dir="/home/airflow/nhl-ml-project/nhl_project/src/models/catboost_info",
     )
 
     catboost_cl_top.fit(X_train_top, y_train, verbose=500)
