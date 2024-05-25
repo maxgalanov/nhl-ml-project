@@ -21,13 +21,13 @@ DEFAULT_ARGS = {
 }
 
 dag = DAG(
-    dag_id="create_datamarts",
+    dag_id="model_prediction",
     schedule_interval="30 13 * * *",
     start_date=days_ago(2),
     catchup=False,
     tags=["hse_nhl_ml_project"],
     default_args=DEFAULT_ARGS,
-    description="Create datamart with games statistics",
+    description="Model predictions",
 )
 
 
