@@ -2,7 +2,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 
-from sklearn.linear_model import CatBoostClassifier
+from catboost import CatBoostClassifier
 
 from airflow.models import DAG
 from airflow.operators.python import PythonOperator
