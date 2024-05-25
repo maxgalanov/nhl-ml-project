@@ -200,13 +200,26 @@ def read_df_from_pg(
     pandas.DataFrame: Данные из указанной таблицы.
     """
     with get_time():
-        connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database}"
-        engine = create_engine(connection_string)
-
         try:
+            conn = psycopg2.connect(
+                database=database,
+                host=host,
+                user=username,
+                password=password,
+                port=port
+            )
+
+            cursor = conn.cursor()
+
             sql_query = f"SELECT * FROM {schema}.{table_name}"
-            
-            df = pd.read_sql_query(sql_query, con=engine)
+
+            cursor.execute(sql_query)
+            colnames = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            df = pd.DataFrame(rows, columns=colnames)
+
+            cursor.close()
+            conn.close()
             print(f"Данные успешно загружены из таблицы {schema}.{table_name} PostgreSQL в DataFrame.")
             return df
         except Exception as e:
