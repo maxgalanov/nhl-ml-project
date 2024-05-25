@@ -9,7 +9,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
-from nhl_project.src.data.functions import get_information, read_table_from_pg, write_table_to_pg
+from nhl_project.src.data.functions import (
+    get_information,
+    read_table_from_pg,
+    write_table_to_pg,
+)
 
 
 DEFAULT_ARGS = {
@@ -35,9 +39,9 @@ dag = DAG(
 def get_players_games_stat_to_source(**kwargs):
     current_date = kwargs["ds"]
 
-    ts = kwargs['ts']
+    ts = kwargs["ts"]
     ts_datetime = datetime.fromisoformat(ts)
-    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+    dt = ts_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
     spark = (
         SparkSession.builder.master("local[*]")
@@ -45,7 +49,9 @@ def get_players_games_stat_to_source(**kwargs):
         .getOrCreate()
     )
 
-    df_players = read_table_from_pg(spark, "dwh_detailed.hub_players").select("player_source_id")
+    df_players = read_table_from_pg(spark, "dwh_detailed.hub_players").select(
+        "player_source_id"
+    )
     players_lst = df_players.distinct().rdd.map(lambda x: x[0]).collect()
 
     df_games = pd.DataFrame()
@@ -87,12 +93,19 @@ def get_players_games_stat_to_source(**kwargs):
 def get_penultimate_table_name(spark, table_name):
 
     df_meta = read_table_from_pg(spark, "dwh_source.metadata_table")
-    
-    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(F.col("updated_at").desc())
+
+    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(
+        F.col("updated_at").desc()
+    )
     if sorted_df_meta.count() < 2:
         return None
     else:
-        second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
+        second_to_last_date = (
+            sorted_df_meta.select("updated_at")
+            .limit(2)
+            .orderBy(F.col("updated_at").asc())
+            .collect()[0][0]
+        )
         return second_to_last_date
 
 
@@ -105,13 +118,18 @@ def get_players_games_stat_to_staging(**kwargs):
         .getOrCreate()
     )
 
-    df_new = read_table_from_pg(spark, f"dwh_source.players_games_stat_{current_date.replace('-', '_')}")
+    df_new = read_table_from_pg(
+        spark, f"dwh_source.players_games_stat_{current_date.replace('-', '_')}"
+    )
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
     prev_table_name = get_penultimate_table_name(spark, "dwh_source.players_games_stat")
 
     if prev_table_name:
-        df_prev = read_table_from_pg(spark, f"dwh_source.players_games_stat_{prev_table_name[:10].replace('-', '_')}")
+        df_prev = read_table_from_pg(
+            spark,
+            f"dwh_source.players_games_stat_{prev_table_name[:10].replace('-', '_')}",
+        )
         df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
 
         df_deleted = df_prev.join(
@@ -294,7 +312,9 @@ def tl_players_games_stat(**kwargs):
         .getOrCreate()
     )
 
-    tl_players_games_stat = read_table_from_pg(spark, "dwh_detailed.tl_players_games_stat")
+    tl_players_games_stat = read_table_from_pg(
+        spark, "dwh_detailed.tl_players_games_stat"
+    )
     df = read_table_from_pg(spark, "dwh_operational.players_games_stat").filter(
         F.col("_batch_id") == F.lit(current_date)
     )
@@ -315,7 +335,9 @@ def tl_players_games_stat(**kwargs):
         ["game_id", "player_id", "team_id", "opponent_team_id"]
     ).orderBy("game_date", "game_id")
 
-    write_table_to_pg(result_df, spark, "overwrite", "dwh_detailed.tl_players_games_stat")
+    write_table_to_pg(
+        result_df, spark, "overwrite", "dwh_detailed.tl_players_games_stat"
+    )
 
 
 task_get_players_games_stat_to_source = PythonOperator(

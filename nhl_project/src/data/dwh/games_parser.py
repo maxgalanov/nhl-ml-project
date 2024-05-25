@@ -9,7 +9,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
-from nhl_project.src.data.functions import get_information, read_table_from_pg, write_table_to_pg
+from nhl_project.src.data.functions import (
+    get_information,
+    read_table_from_pg,
+    write_table_to_pg,
+)
 
 
 DEFAULT_ARGS = {
@@ -35,9 +39,9 @@ dag = DAG(
 def get_games_to_source(**kwargs):
     current_date = kwargs["ds"]
 
-    ts = kwargs['ts']
+    ts = kwargs["ts"]
     ts_datetime = datetime.fromisoformat(ts)
-    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+    dt = ts_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
     spark = (
         SparkSession.builder.config(
@@ -72,12 +76,19 @@ def get_games_to_source(**kwargs):
 def get_penultimate_table_name(spark, table_name):
 
     df_meta = read_table_from_pg(spark, "dwh_source.metadata_table")
-    
-    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(F.col("updated_at").desc())
+
+    sorted_df_meta = df_meta.filter(F.col("table_name") == table_name).orderBy(
+        F.col("updated_at").desc()
+    )
     if sorted_df_meta.count() < 2:
         return None
     else:
-        second_to_last_date = sorted_df_meta.select("updated_at").limit(2).orderBy(F.col("updated_at").asc()).collect()[0][0]
+        second_to_last_date = (
+            sorted_df_meta.select("updated_at")
+            .limit(2)
+            .orderBy(F.col("updated_at").asc())
+            .collect()[0][0]
+        )
         return second_to_last_date
 
 
@@ -94,7 +105,9 @@ def get_games_to_staging(**kwargs):
         .getOrCreate()
     )
 
-    df_new = read_table_from_pg(spark, f"dwh_source.games_{current_date.replace('-', '_')}")
+    df_new = read_table_from_pg(
+        spark, f"dwh_source.games_{current_date.replace('-', '_')}"
+    )
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
     prev_table_name = get_penultimate_table_name(spark, "dwh_source.games")
@@ -106,7 +119,8 @@ def get_games_to_staging(**kwargs):
         df_prev = df_prev.withColumn("_source_is_deleted", F.lit("True"))
 
         df_deleted = df_prev.join(df_new, "id", "leftanti").withColumn(
-            "_source_load_datetime", F.lit(df_new.select("_source_load_datetime").first()[0])
+            "_source_load_datetime",
+            F.lit(df_new.select("_source_load_datetime").first()[0]),
         )
 
         df_changed = df_new.select(
@@ -142,7 +156,9 @@ def get_games_to_staging(**kwargs):
         )
         df_changed = df_new.join(df_changed, "id", "inner").select(df_new["*"])
 
-        df_final = df_changed.unionByName(df_deleted).withColumn("_batch_id", F.lit(current_date))
+        df_final = df_changed.unionByName(df_deleted).withColumn(
+            "_batch_id", F.lit(current_date)
+        )
     else:
         df_final = df_new.withColumn("_batch_id", F.lit(current_date))
 
@@ -167,7 +183,9 @@ def get_games_to_operational(**kwargs):
     df = (
         df.select(
             F.col("id").alias("game_source_id"),
-            F.concat_ws("_", F.col("game_source_id"), F.col("_source")).alias("game_business_id"),
+            F.concat_ws("_", F.col("game_source_id"), F.col("_source")).alias(
+                "game_business_id"
+            ),
             F.col("gameDate").alias("game_date"),
             F.col("season"),
             F.col("homeTeamId").alias("home_team_source_id"),
@@ -187,11 +205,14 @@ def get_games_to_operational(**kwargs):
         )
         .withColumn("game_id", F.sha1(F.col("game_business_id")))
         .withColumn(
-            "home_team_id", F.sha1(F.concat_ws("_", F.col("home_team_source_id"), F.col("_source")))
+            "home_team_id",
+            F.sha1(F.concat_ws("_", F.col("home_team_source_id"), F.col("_source"))),
         )
         .withColumn(
             "visiting_team_id",
-            F.sha1(F.concat_ws("_", F.col("visiting_team_source_id"), F.col("_source"))),
+            F.sha1(
+                F.concat_ws("_", F.col("visiting_team_source_id"), F.col("_source"))
+            ),
         )
     )
 
@@ -239,7 +260,9 @@ def hub_games(**kwargs):
         df_old = read_table_from_pg(spark, f"dwh_detailed.hub_games")
 
         df_new = df_new.join(df_old, "game_id", "leftanti")
-        df_final = df_new.unionByName(df_old).orderBy("_source_load_datetime", "game_id")
+        df_final = df_new.unionByName(df_old).orderBy(
+            "_source_load_datetime", "game_id"
+        )
     except:
         df_final = df_new.orderBy("_source_load_datetime", "game_id")
 
@@ -485,8 +508,8 @@ def pit_games(**kwargs):
         date_grid.effective_from,
         date_grid.effective_to,
         F.when(date_grid.effective_to == "2040-01-01 00:00:00", True)
-            .otherwise(False)
-            .alias("is_active"),
+        .otherwise(False)
+        .alias("is_active"),
         F.col("_version").alias("sat_game_version"),
     )
 

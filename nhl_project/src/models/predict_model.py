@@ -8,7 +8,11 @@ from airflow.models import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
-from nhl_project.src.data.functions import read_df_from_pg, write_into_database, load_object
+from nhl_project.src.data.functions import (
+    read_df_from_pg,
+    write_into_database,
+    load_object,
+)
 
 
 DEFAULT_ARGS = {
@@ -33,9 +37,15 @@ dag = DAG(
 
 def model_predict():
     games_winner_prediction = read_df_from_pg("games_winner_prediction")
-    model_dataset = load_object("home/airflow/nhl-ml-project/nhl_project/data/processed/model_dataset.pkl")
-    top_features = load_object("home/airflow/nhl-ml-project/nhl_project/data/processed/top_features.pkl")
-    model = load_object("home/airflow/nhl-ml-project/nhl_project/models/trained_model.pkl")
+    model_dataset = load_object(
+        "home/airflow/nhl-ml-project/nhl_project/data/processed/model_dataset.pkl"
+    )
+    top_features = load_object(
+        "home/airflow/nhl-ml-project/nhl_project/data/processed/top_features.pkl"
+    )
+    model = load_object(
+        "home/airflow/nhl-ml-project/nhl_project/models/trained_model.pkl"
+    )
 
     today = datetime.now()
     yesterday = (today - timedelta(days=2)).strftime("%Y-%m-%d")
@@ -73,7 +83,6 @@ def model_predict():
         [df_old, df_prdeiction], axis=0, ignore_index=True, sort=False
     ).sort_values(by="game_date")
 
-
     write_query = """ 
         INSERT INTO public.games_winner_prediction(
             game_source_id
@@ -89,8 +98,8 @@ def model_predict():
             , home_team_win
         ) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
         """
-    
-    write_into_database(df_prdeiction_new, 'games_winner_prediction', write_query)
+
+    write_into_database(df_prdeiction_new, "games_winner_prediction", write_query)
 
 
 task_model_predict = PythonOperator(

@@ -9,7 +9,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 import pyspark.sql.functions as F
 
-from nhl_project.src.data.functions import get_information, read_table_from_pg, write_table_to_pg
+from nhl_project.src.data.functions import (
+    get_information,
+    read_table_from_pg,
+    write_table_to_pg,
+)
 
 
 DEFAULT_ARGS = {
@@ -35,9 +39,9 @@ dag = DAG(
 def get_teams_stat_to_source(**kwargs):
     current_date = kwargs["ds"]
 
-    ts = kwargs['ts']
+    ts = kwargs["ts"]
     ts_datetime = datetime.fromisoformat(ts)
-    dt = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+    dt = ts_datetime.strftime("%Y-%m-%d %H:%M:%S")
 
     spark = (
         SparkSession.builder.config(
@@ -54,14 +58,14 @@ def get_teams_stat_to_source(**kwargs):
 
     for i in range(14):
         date = current_dt - timedelta(days=i)
-        dates_last_week.append(date.strftime('%Y-%m-%d'))
+        dates_last_week.append(date.strftime("%Y-%m-%d"))
 
     teams_stat = pd.DataFrame()
 
     for date in dates_last_week:
         try:
             data_team_stat = get_information(f"/v1/standings/{date}")
-            df_teams_stat = pd.DataFrame(data_team_stat['standings'])
+            df_teams_stat = pd.DataFrame(data_team_stat["standings"])
 
             teams_stat = pd.concat([teams_stat, df_teams_stat], ignore_index=True)
         except:
@@ -109,7 +113,9 @@ def get_teama_stat_to_staging(**kwargs):
         .getOrCreate()
     )
 
-    df_new = read_table_from_pg(spark, f"dwh_source.teams_stat_{current_date.replace('-', '_')}")
+    df_new = read_table_from_pg(
+        spark, f"dwh_source.teams_stat_{current_date.replace('-', '_')}"
+    )
     df_new = df_new.withColumn("_source_is_deleted", F.lit("False"))
 
     df_final = df_new.withColumn("_batch_id", F.lit(current_date))
@@ -163,7 +169,9 @@ def get_teama_stat_to_operational(**kwargs):
         F.col("homeLosses").cast("int").alias("home_losses"),
         F.col("homeOtLosses").cast("int").alias("home_ot_losses"),
         F.col("homePoints").cast("int").alias("home_points"),
-        F.col("homeRegulationPlusOtWins").cast("int").alias("home_regulation_plus_ot_wins"),
+        F.col("homeRegulationPlusOtWins")
+        .cast("int")
+        .alias("home_regulation_plus_ot_wins"),
         F.col("homeRegulationWins").cast("int").alias("home_regulation_wins"),
         F.col("homeTies").cast("int").alias("home_ties"),
         F.col("homeWins").cast("int").alias("home_wins"),
@@ -174,7 +182,9 @@ def get_teama_stat_to_operational(**kwargs):
         F.col("l10Losses").cast("int").alias("l10_losses"),
         F.col("l10OtLosses").cast("int").alias("l10_ot_losses"),
         F.col("l10Points").cast("int").alias("l10_points"),
-        F.col("l10RegulationPlusOtWins").cast("int").alias("l10_regulation_plus_ot_wins"),
+        F.col("l10RegulationPlusOtWins")
+        .cast("int")
+        .alias("l10_regulation_plus_ot_wins"),
         F.col("l10RegulationWins").cast("int").alias("l10_regulation_wins"),
         F.col("l10Ties").cast("int").alias("l10_ties"),
         F.col("l10Wins").cast("int").alias("l10_wins"),
@@ -187,7 +197,9 @@ def get_teama_stat_to_operational(**kwargs):
         F.col("placeName").alias("place_name"),
         F.col("pointPctg").cast("double").alias("point_pctg"),
         F.col("points").cast("int").alias("points"),
-        F.col("regulationPlusOtWinPctg").cast("double").alias("regulation_plus_ot_win_pctg"),
+        F.col("regulationPlusOtWinPctg")
+        .cast("double")
+        .alias("regulation_plus_ot_win_pctg"),
         F.col("regulationPlusOtWins").cast("int").alias("regulation_plus_ot_wins"),
         F.col("regulationWinPctg").cast("double").alias("regulation_win_pctg"),
         F.col("regulationWins").cast("int").alias("regulation_wins"),
@@ -198,7 +210,9 @@ def get_teama_stat_to_operational(**kwargs):
         F.col("roadLosses").cast("int").alias("road_losses"),
         F.col("roadOtLosses").cast("int").alias("road_ot_losses"),
         F.col("roadPoints").cast("int").alias("road_points"),
-        F.col("roadRegulationPlusOtWins").cast("int").alias("road_regulation_plus_ot_wins"),
+        F.col("roadRegulationPlusOtWins")
+        .cast("int")
+        .alias("road_regulation_plus_ot_wins"),
         F.col("roadRegulationWins").cast("int").alias("road_regulation_wins"),
         F.col("roadTies").cast("int").alias("road_ties"),
         F.col("roadWins").cast("int").alias("road_wins"),
@@ -218,8 +232,9 @@ def get_teama_stat_to_operational(**kwargs):
         F.col("_batch_id"),
     )
 
-    df = df.join(hub_teams, "team_business_id", "left") \
-        .select(df["*"], hub_teams["team_id"], hub_teams["team_source_id"])
+    df = df.join(hub_teams, "team_business_id", "left").select(
+        df["*"], hub_teams["team_id"], hub_teams["team_source_id"]
+    )
 
     write_table_to_pg(df, spark, "append", "dwh_operational.teams_stat")
 
@@ -353,7 +368,8 @@ def sat_teams_core(**kwargs):
         ),
     )
 
-    scd2 = row_versions.groupBy(
+    scd2 = (
+        row_versions.groupBy(
             F.col("team_id"),
             F.col("team_name"),
             F.col("team_common_name"),
@@ -366,20 +382,24 @@ def sat_teams_core(**kwargs):
             F.col("_source_is_deleted"),
             F.col("_data_hash"),
             F.col("_version"),
-        ).agg(
+        )
+        .agg(
             F.min(F.col("effective_from")).alias("effective_from"),
             F.max(F.col("effective_to")).alias("effective_to"),
             F.min_by("_source", "effective_from").alias("_source"),
-        ).withColumn(
+        )
+        .withColumn(
             "is_active",
             F.when(F.col("effective_to") == "2040-01-01 00:00:00", "True").otherwise(
                 "False"
             ),
-        ).drop("_version") \
+        )
+        .drop("_version")
         .withColumn(
             "_version",
             F.sha1(F.concat_ws("_", F.col("_data_hash"), F.col("effective_from"))),
         )
+    )
 
     try:
         union = state.unionByName(scd2).orderBy("team_id", "effective_from")
@@ -415,9 +435,11 @@ def tl_teams_stat(**kwargs):
         F.col("_source_load_datetime").desc()
     )
 
-    result_df = df.withColumn("rank", F.row_number().over(window_spec)) \
-        .filter("rank = 1") \
+    result_df = (
+        df.withColumn("rank", F.row_number().over(window_spec))
+        .filter("rank = 1")
         .drop("rank")
+    )
 
     result_df = result_df.dropDuplicates(["team_id", "date"]).orderBy("date", "team_id")
 
@@ -501,13 +523,15 @@ def dm_teams(**kwargs):
     df_sat = read_table_from_pg(spark, "dwh_detailed.sat_teams_core")
     df_pit = read_table_from_pg(spark, "dwh_common.pit_teams")
 
-    df_dm = df_hub.join(df_pit, df_hub.team_id == df_pit.team_id, "inner") \
+    df_dm = (
+        df_hub.join(df_pit, df_hub.team_id == df_pit.team_id, "inner")
         .join(
             df_sat,
             (df_pit.sat_teams_core_version == df_sat._version)
             & (df_pit.team_id == df_sat.team_id),
             "left",
-        ).select(
+        )
+        .select(
             df_hub.team_id,
             df_hub.team_business_id,
             df_sat.team_name,
@@ -521,7 +545,9 @@ def dm_teams(**kwargs):
             df_pit.effective_from,
             df_pit.effective_to,
             df_pit.is_active,
-        ).orderBy("team_id", "effective_from")
+        )
+        .orderBy("team_id", "effective_from")
+    )
 
     write_table_to_pg(df_dm, spark, "overwrite", "dwh_common.dm_teams")
 
@@ -568,6 +594,10 @@ task_dm_teams = PythonOperator(
     dag=dag,
 )
 
-task_get_teams_stat_to_source >> task_get_teama_stat_to_staging >> task_get_teama_stat_to_operational
+(
+    task_get_teams_stat_to_source
+    >> task_get_teama_stat_to_staging
+    >> task_get_teama_stat_to_operational
+)
 task_get_teama_stat_to_operational >> [task_sat_teams_core, task_tl_teams_stat]
 task_sat_teams_core >> task_pit_teams >> task_dm_teams
