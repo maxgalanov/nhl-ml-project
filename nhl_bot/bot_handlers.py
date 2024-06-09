@@ -74,7 +74,7 @@ def register_bot_commands(bot):
                 SELECT * 
                 FROM public.games_wide_datamart 
                 WHERE game_date between current_date - interval '1 week' and current_date
-                    AND (home_score != 0 AND visiting_score != 0)
+                    AND (home_score != 0 OR visiting_score != 0)
                 ORDER BY eastern_start_time DESC, game_date
             """)
             db_pool.close_all_connections()
