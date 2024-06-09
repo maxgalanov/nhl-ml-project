@@ -60,7 +60,7 @@ def get_upcoming_games_query(user_id):
             CASE WHEN b.user_id IS NULL THEN false ELSE true END as bet_placed
         FROM public.games_wide_datamart g
         LEFT JOIN public.users_bets b ON g.game_source_id = b.game_id AND b.user_id = {user_id}
-        WHERE g.eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
+        WHERE g.eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '5 days'
         AND g.home_score = 0 AND g.visiting_score = 0
         ORDER BY g.eastern_start_time;
 
@@ -111,7 +111,7 @@ def get_upcoming_preds_query():
             row_number() over (partition by home_team_name, visiting_team_name order by eastern_start_time) as rn
         FROM public.games_winner_prediction
         WHERE True
-            AND eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '2 days'
+            AND eastern_start_time::timestamp at time zone 'UTC+3' BETWEEN now() AND now() + interval '5 days'
         )
         SELECT
             game_source_id, 
